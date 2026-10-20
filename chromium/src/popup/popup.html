@@ -1,0 +1,84 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bilibili Playback Route Optimizer</title>
+    <link rel="stylesheet" href="../ui/base.css" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <!-- 英文文案写在 data-en / data-en-*（见 ui/format.js localize） -->
+  <body>
+    <header>
+      <div class="brand"><img src="../../icons/icon32.png" width="28" height="28" alt="" /><div class="brand-name"><h1>Bilibili Playback Route Optimizer</h1><span class="mode" id="mode" data-en="Observe mode">观察模式</span></div></div>
+      <label class="power" title="关掉后暂停整个扩展：不记录、不改写播放地址、不测速" data-en-title="Turn off to pause the whole extension: no recording, no URL rewriting, no speed tests"><span data-en="On">启用</span><input type="checkbox" id="opt-enabled" role="switch" /></label>
+      <!-- 切换语言：文字和说明由 ui/format.js langButton 按当前语言填 -->
+      <button id="lang" class="lang"></button>
+      <button id="open-stats" data-en="Stats">统计</button>
+    </header>
+    <div id="error" class="warn" role="alert" hidden></div>
+    <main id="main"><section class="card empty" data-en="Reading the current page…">正在读取当前页面…</section></main>
+    <!-- 标记区不随定时刷新重绘，避免清掉正在输入的备注 -->
+    <section class="card mark" id="mark-card">
+      <div class="mark-head">
+        <h2 data-en="Report a problem">手动问题标注</h2>
+        <span class="muted" id="shortcut"></span>
+      </div>
+      <div class="mark-buttons">
+        <button data-lv="1" disabled data-en="Few stalls">少量卡顿</button>
+        <button data-lv="2" disabled data-en="Many stalls">较多卡顿</button>
+        <button data-lv="3" disabled data-en="Won't play">无法播放</button>
+        <button data-issue="sync" disabled data-en="A/V out of sync">音画不同步</button>
+      </div>
+      <input id="note" type="text" maxlength="100" aria-label="问题备注（可选）" placeholder="备注（可选）" data-en-aria-label="Problem note (optional)" data-en-placeholder="Note (optional)" disabled />
+      <div class="mark-status muted" role="status">
+        <span id="mark-text" data-en="Reading the current page…">正在读取当前页面…</span>
+        <span class="mark-actions">
+          <button id="reload" class="link" hidden data-en="Reload for a new node">刷新换节点</button>
+          <button id="undo" class="link" hidden data-en="Undo">撤销</button>
+        </span>
+      </div>
+      <label class="toggle small"><input type="checkbox" id="opt-button" /> <span data-en="Mark button on the player">播放器标记按钮</span></label>
+    </section>
+    <!-- 设置区不随定时刷新重绘，避免打断操作 -->
+    <section class="card settings" id="settings-card">
+      <div class="settings-head"><h2 data-en="Route settings">线路设置</h2><span class="muted hint" id="settings-hint" data-en="Applies on next load">下次加载生效</span></div>
+      <div class="setting-switches">
+        <label class="switch-row"><span data-en="Route optimization">线路优化</span><input type="checkbox" id="opt-route" role="switch" /></label>
+        <label class="switch-row"><span data-en="Auto speed test">自动测速</span><input type="checkbox" id="opt-probe" role="switch" /></label>
+      </div>
+      <div class="route-options">
+        <div class="opt-row">
+          <label for="opt-vod" class="muted" data-en="VOD node">点播节点</label>
+          <select id="opt-vod"><option value="auto" data-en="Auto">自动</option></select>
+        </div>
+        <div class="opt-row">
+          <label for="opt-live" class="muted" data-en="Live protocol">直播线路</label>
+          <select id="opt-live">
+            <option value="auto" data-en="Auto">自动</option>
+            <option value="flv" data-en="Prefer FLV">FLV优先</option>
+            <option value="hls" data-en="Prefer HLS">HLS优先</option>
+          </select>
+        </div>
+      </div>
+    </section>
+    <section class="card diagnostics">
+      <details class="advanced">
+        <summary data-en="Advanced">高级</summary>
+        <div class="advanced-menu">
+          <details><summary><span data-en="Recent problems">近期问题</span> <span id="trouble-count" class="muted"></span></summary><div id="trouble"></div></details>
+          <details><summary><span data-en="Speed tests">测速结果</span> <span id="probe-state" class="muted"></span></summary><div id="probe"></div></details>
+          <details><summary data-en="Node details">节点明细</summary><div id="connections"></div></details>
+        </div>
+      </details>
+    </section>
+    <footer id="footer" class="muted"></footer>
+    <script src="../shared/cdn.js"></script>
+    <script src="../shared/route.js"></script>
+    <script src="../shared/probe.js"></script>
+    <script src="../shared/analyze.js"></script>
+    <script src="../ui/format.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

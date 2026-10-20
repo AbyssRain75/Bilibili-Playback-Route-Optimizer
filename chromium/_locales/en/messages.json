@@ -1,0 +1,8 @@
+{
+  "description": {
+    "message": "Optimizes Bilibili video and live stream routes, and records node performance, speed tests and stalls."
+  },
+  "markLag": {
+    "message": "Mark the current video / stream as \"Many stalls\""
+  }
+}

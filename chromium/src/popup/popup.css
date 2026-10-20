@@ -1,0 +1,227 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+body {
+  width: 480px;
+  max-width: 100%;
+  padding: 14px;
+}
+
+header,
+.brand,
+.overview-head,
+.settings-head,
+.mark-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+header { margin: 2px 2px 14px; }
+.brand { justify-content: flex-start; flex: 1; min-width: 0; gap: 8px; }
+.brand img { flex: none; }
+.brand-name { display: grid; justify-items: start; min-width: 0; gap: 4px; }
+.brand h1 { font-size: 14px; line-height: 1.3; letter-spacing: -.2px; text-wrap: balance; }
+header > button { flex: none; padding: 5px 12px; font-size: 12px; }
+.power { display: flex; align-items: center; gap: 6px; flex: none; color: var(--muted); font-size: 12px; cursor: pointer; }
+
+.mode {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.mode.on { background: var(--accent-soft); color: var(--accent); }
+.mode.paused { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); color: var(--warn); }
+main { display: grid; gap: 10px; }
+.card { padding: 14px; }
+.overview { background: linear-gradient(135deg, var(--accent-soft), transparent 55%), var(--surface); }
+.overview-head h2, .settings-head h2, .mark-head h2 { margin: 0; }
+
+.status {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.warn-text { color: var(--warn); }
+.meta-line { margin-bottom: 6px; }
+.meta-line.path { margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.meta-line.route { font-size: 11px; overflow-wrap: anywhere; }
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 10px;
+}
+
+.metrics > div { padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.metrics span { display: block; color: var(--muted); font-size: 11px; }
+.metrics b { font-size: 23px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.4; }
+.metrics small { font-size: 11px; font-weight: 400; color: var(--muted); }
+.playback-meta { font-size: 11px; overflow-wrap: anywhere; }
+.nodes { border-top: 1px solid var(--border); padding-top: 9px; margin-top: 10px; font-size: 12px; }
+.nodes-head { font-size: 11px; margin-bottom: 4px; }
+.nodes ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.nodes li { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 10px; min-width: 0; }
+.nodes .host { flex: 1 1 140px; min-width: 0; max-width: none; white-space: nowrap; }
+.node-facts { font-size: 11px; color: var(--muted); }
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bad) 9%, var(--surface));
+  font-size: 12px;
+}
+
+.banner span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.banner button { flex: none; padding: 4px 10px; font-size: 12px; }
+.diagnosis { margin-top: 8px; font-size: 12px; }
+.settings, .mark { margin-top: 10px; display: grid; gap: 10px; }
+.hint { font-size: 11px; }
+.setting-switches, .route-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.switch-row input,
+.power input {
+  appearance: none;
+  width: 32px;
+  height: 18px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: var(--muted);
+  margin: 0;
+  flex: none;
+  cursor: pointer;
+  position: relative;
+  transition: background .15s;
+}
+
+.switch-row input::before,
+.power input::before {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  top: 2px;
+  left: 2px;
+  transition: transform .15s;
+}
+
+.switch-row input:checked, .power input:checked { background: var(--accent); }
+.switch-row input:checked::before, .power input:checked::before { transform: translateX(14px); }
+/* 暂停时线路设置和标记按钮开关不可用 */
+.switch-row:has(input:disabled), .toggle:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+.switch-row input:disabled, .toggle input:disabled { cursor: not-allowed; }
+.opt-row { display: grid; min-width: 0; gap: 5px; }
+.opt-row label { font-size: 11px; }
+.opt-row select { width: 100%; background: var(--surface); }
+select:disabled { opacity: .5; cursor: not-allowed; }
+.mark-head .muted { padding: 2px 6px; border: 1px solid var(--border); border-radius: 5px; font-size: 10px; }
+#shortcut:empty { display: none; }
+.mark-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.mark-buttons button { padding: 7px 0; font-size: 12px; }
+.mark-status { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; font-size: 11px; }
+.mark-actions { display: flex; gap: 10px; flex: none; }
+.toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.toggle input { margin: 0; accent-color: var(--accent); }
+.toggle.small { font-size: 11px; color: var(--muted); }
+.diagnostics { margin-top: 10px; padding: 0 14px; }
+.advanced-menu { border-top: 1px solid var(--border); padding-left: 12px; }
+.advanced-menu > details + details { border-top: 1px solid var(--border); }
+.advanced-menu summary { font-weight: 500; }
+.diagnostics details[open] > summary { margin-bottom: 0; }
+
+.diagnostics summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.diagnostics summary::-webkit-details-marker { display: none; }
+.diagnostics summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform .15s;
+  flex: none;
+}
+
+.diagnostics details[open] > summary::before { transform: rotate(45deg); }
+summary .muted { margin-left: auto; min-width: 0; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 400; }
+.diagnostics .card { border: 0; padding: 6px 0 12px; border-radius: 0; }
+.diagnostics table { table-layout: fixed; font-size: 12px; }
+.diagnostics th, .diagnostics td { padding: 7px 3px; }
+.diagnostics .meta-line { overflow-wrap: anywhere; font-size: 11px; }
+.advanced-menu > details > div { padding-bottom: 12px; }
+th.cls { width: 86px; }
+th.num { width: 46px; }
+th.wide { width: 58px; }
+th.kind { width: 44px; }
+th.state { width: 40px; }
+th.kindq { width: 60px; }
+th.wide-state { width: 72px; }
+td.host { max-width: none; }
+td.what { overflow: hidden; text-overflow: ellipsis; }
+td.line .sub,
+td .sub.warn-text { font-size: 11px; line-height: 1.3; white-space: nowrap; }
+.diagnostics table + .meta-line, .meta-line.known { margin-top: 12px; }
+
+.warn {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warn) 9%, var(--surface));
+  color: var(--warn);
+  font-size: 12px;
+}
+
+.overview .warn { margin-top: 10px; }
+main > .empty { display: grid; gap: 6px; padding: 24px 16px; text-align: center; }
+main > .empty b { color: var(--text); font-weight: 600; }
+main > .empty span { font-size: 12px; }
+footer { display: flex; justify-content: space-between; gap: 12px; margin: 12px 2px 0; font-size: 10px; }
+footer span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+footer span:first-child { flex: none; }
+
+@media (max-width: 380px) {
+  body { padding: 10px; }
+  .card { padding: 12px; }
+  .diagnostics { padding: 0 12px; }
+  .metrics { gap: 6px; }
+  .metrics > div { padding: 8px; }
+  .metrics b { font-size: 20px; }
+  .mark-head { flex-wrap: wrap; gap: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch-row input, .switch-row input::before, .power input, .power input::before, .diagnostics summary::before { transition: none; }
+}

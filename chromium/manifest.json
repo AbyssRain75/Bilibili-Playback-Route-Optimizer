@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "Bilibili Playback Route Optimizer",
+  "version": "1.0.0",
+  "description": "__MSG_description__",
+  "default_locale": "en",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage", "unlimitedStorage", "webRequest", "alarms", "declarativeNetRequestWithHostAccess"],
+  "host_permissions": [
+    "*://*.bilibili.com/*",
+    "*://*.bilivideo.com/*",
+    "*://*.bilivideo.cn/*",
+    "*://*.akamaized.net/*",
+    "*://*.szbdyd.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background/sw.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.bilibili.com/*"],
+      "js": ["src/shared/cdn.js", "src/shared/playinfo.js", "src/shared/route.js", "src/main/hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": ["*://*.bilibili.com/*"],
+      "js": ["src/content/bridge.js", "src/content/player.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_title": "Bilibili Playback Route Optimizer",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "commands": {
+    "mark-lag": {
+      "suggested_key": { "default": "Alt+Shift+K" },
+      "description": "__MSG_markLag__"
+    }
+  },
+  "options_ui": {
+    "page": "src/stats/stats.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

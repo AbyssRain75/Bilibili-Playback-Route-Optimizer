@@ -1,0 +1,154 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title data-en="Bilibili Playback Route Optimizer · Stats">Bilibili Playback Route Optimizer · 统计</title>
+    <link rel="stylesheet" href="../ui/base.css" />
+    <link rel="stylesheet" href="stats.css" />
+  </head>
+  <!-- 英文文案写在 data-en / data-en-*，长段落中英文各一份（data-lang），见 ui/format.js localize -->
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <div class="eyebrow">Bilibili Playback Route Optimizer</div>
+          <h1 data-en="Playback report">播放体验报告</h1>
+          <div class="muted" id="subtitle" data-en="Loading…">读取中…</div>
+        </div>
+        <div class="actions">
+          <!-- 切换语言：文字和说明由 ui/format.js langButton 按当前语言填 -->
+          <button id="lang" class="lang"></button>
+          <label class="keep"><span data-en="Keep records">记录保留</span><select id="keep" disabled></select></label>
+          <button id="refresh" data-en="Refresh">刷新</button>
+          <button id="export" class="primary" data-en="Export JSON">导出 JSON</button>
+          <button id="clear" class="danger" data-en="Clear all">清空全部</button>
+        </div>
+      </header>
+      <section class="card keep-notice" id="keep-notice" aria-labelledby="keep-notice-title" hidden>
+        <h2 id="keep-notice-title" data-en="Delete records older than the retention period?">删除超过保留时长的记录？</h2>
+        <p id="keep-notice-text"></p>
+        <div class="notice-actions"><button id="keep-export" data-en="Export first">先导出</button><button id="keep-delete" class="confirm-danger" data-en="Delete">删除</button></div>
+      </section>
+      <div class="report-range" role="group" aria-label="统计范围" data-en-aria-label="Report range">
+        <button type="button" data-period="day" aria-pressed="false" disabled data-en="Today">本日</button>
+        <button type="button" data-period="week" aria-pressed="false" disabled data-en="This week">本周</button>
+        <button type="button" data-period="all" aria-pressed="true" disabled data-en="Since install">安装以来</button>
+      </div>
+      <section class="tiles" id="tiles"></section>
+      <nav class="section-nav" aria-label="报告章节" data-en-aria-label="Report sections"><a href="#node-section" data-en="Nodes">节点表现</a><a href="#mark-section" data-en="Problem marks">问题标注</a><a href="#timeline-section" data-en="Session timeline">会话时间轴</a><a href="#environment-section" data-en="Network &amp; pages">网络与页面</a></nav>
+      <section class="card" id="node-section">
+        <div class="card-head"><h2 data-en="Node performance">节点表现</h2><span id="host-count" class="muted" role="status"></span></div>
+        <div class="filters"><input id="host-search" type="search" aria-label="搜索节点域名" placeholder="搜索节点域名…" data-en-aria-label="Search node hosts" data-en-placeholder="Search node hosts…" /><select id="host-filter" aria-label="筛选节点" data-en-aria-label="Filter nodes"><option value="all" data-en="All nodes">全部节点</option><option value="problem" data-en="With failures or stalls">有失败或卡顿</option><option value="probed" data-en="Speed tested">有测速记录</option><option value="pcdn">PCDN</option></select></div>
+        <div class="scroll" id="hosts"></div>
+      </section>
+      <section class="card" id="mark-section">
+        <h2 data-en="Problem marks">问题标注</h2>
+        <div class="scroll" id="marks"></div>
+      </section>
+      <section class="card" id="timeline-section">
+        <div class="card-head">
+          <h2 data-en="Session timeline">会话时间轴</h2>
+          <label class="toggle"><input type="checkbox" id="tl-all" /> <span data-en="All sessions">全部会话</span></label>
+        </div>
+        <div class="tl-legend muted" aria-hidden="true">
+          <span><i class="key key-req"></i><span data-en="Media requests">媒体请求</span></span>
+          <span><i class="key key-err"></i><span data-en="Failed requests">请求失败</span></span>
+          <span title="浅色为 1 秒以下" data-en-title="Light: under 1 s"><i class="key key-stall"></i><span data-en="Stalls">卡顿</span></span>
+          <span title="实心为起播慢或没能起播" data-en-title="Solid: slow or failed start"><i class="key key-start"></i><span data-en="Startup">起播</span></span>
+          <span><i class="key key-mark"></i><span data-en="Manual marks">手动标记</span></span>
+          <span><i class="key key-route"></i><span data-en="Route rewrites">改写线路</span></span>
+        </div>
+        <div id="timeline"></div>
+        <div class="tl-foot"><button id="tl-more" hidden data-en="Show more">显示更多</button></div>
+        <div class="tl-tip" id="tl-tip" role="tooltip" hidden></div>
+      </section>
+      <section class="grid-2" id="environment-section">
+        <div class="card">
+          <h2 data-en="By page type">按页面类型</h2>
+          <div class="scroll" id="pages"></div>
+        </div>
+        <div class="card">
+          <h2 data-en="Network changes">网络环境变化</h2>
+          <div id="nets"></div>
+        </div>
+      </section>
+      <details class="card definitions"><summary data-en="Definitions">统计口径</summary><p class="muted note" data-lang="zh">
+        数据只保存在本机浏览器里，只保留右上角「记录保留」选的时长（默认 15 天，2~6 个月按 30 天一个月算），超过的自动删除；之前开始、之后还有记录的会话，开头的页面和分配记录留着。改短了要删记录时先问；0.6.25 之前已有的记录，第一次删除前也先问。导出分两种：「普通导出」（脱敏）保留节点的 host 和 IP（含 PCDN）、国家和 ISP，出过问题（卡顿、起播慢、没能起播、手动标记）的会话原样保留，包括视频和直播间的地址、标记备注；其他会话的页面地址和视频编号、网络位置的地区和城市换成编号（同一个值同一个编号），撤销了的标记的备注去掉。「完整信息导出」原样导出，包含看过的所有页面和视频、网络位置历史（含城市和 ISP）、CDN 和 PCDN 的 IP、标记备注，只用于定位、分析问题，不要公开分享。只记播放过的页面（拿到了播放地址、请求了媒体、标记过或测过速），没有播放的 B 站页面（个人空间、动态、专栏等）不记；0.6.23 之前的记录里还有这些页面的路径，要清掉可以先导出再清空。
+        「播放会话」为有媒体请求的会话，「记下的会话」为写进记录的会话（0.6.23 起只有播放过的页面，之前的记录里每打开一个 B 站页面算一个）。
+        TTFB 为请求发出到响应头到达的时间，浏览器缓存直接答复的请求（响应头不到 10 ms 就到）不计入；记录里标着缓存（fc）的大多也问了节点，照常计入（0.6.27 以前不计）。
+        Mbps 只统计 512 KB 以上、传输超过 50 ms 的响应（直播分片太小，看 TTFB 即可）。
+        播放器主动中止的请求（拖动、切清晰度）不算失败，但等了 1.9 秒以上才中止的算超时失败（播放器多在 2 秒、5 秒、10 秒放弃）。
+        「自动识别卡顿」包含 1 秒以上的缓冲（不含拖动进度）、起播超过 5 秒或没能起播；节点表只计该节点是主要责任节点的次数。
+        页面在后台时不计卡顿（浏览器在后台只放声音、不取画面）；切回前台后恢复画面的缓冲、计时期间进过后台的起播照样记下，但不算节点的问题。
+        「被标记」为手动标记卡顿时，该节点在标记前 60 秒内是主要责任节点的次数；音画不同步、判断为掉帧或缓冲充足的标记不算。
+        责任按请求“在途”（发出了还没下完）的时间分：在途最久的节点为主要责任节点，不少于它一半的也算；标记记录里淡色的节点责任较小。
+        手动标记的「判断」看标记那一刻的播放器：前方缓冲见底、正在转圈或 30 秒内卡过为缓冲不足（网络 / 节点），缓冲充足但近 10 秒掉帧 5% 以上为掉帧（解码 / 渲染，与节点无关）。
+        「测速」为自动测速估算的可持续速率（Mbps）中位数：按播放器一段一段取数据的方式，把首字节时间算进去，失败记 0。
+        PCDN 指 B 站租用的家庭宽带、P2P 等节点：mcdn 子域、带端口或 IP 直连的 host、302 跳转到 PCDN 的 upos 节点等，线路优化会把它们排到官方 CDN 后面。
+      </p><p class="muted note" data-lang="en" hidden>
+        Data is stored only in this browser and kept for the period chosen under "Keep records" at the top right (15 days by default; 2–6 months count 30 days per month). Older records are deleted automatically; for a session that started before the cutoff and still has later records, its opening page and assignment records are kept. Shortening the period asks before deleting; records from before 0.6.25 also ask before their first deletion. There are two kinds of export. "Standard export" (redacted) keeps node hosts and IPs (including PCDN), country and ISP, and keeps sessions with problems (stalls, slow or failed starts, manual marks) as they are, including video and live room URLs and mark notes; for other sessions, page URLs and video IDs, and the region and city of the network location, are replaced with numbers (the same value gets the same number), and notes on undone marks are removed. "Full export" exports everything as is, including every page and video watched, the network location history (with city and ISP), CDN and PCDN IPs and mark notes; it is only for locating and analysing problems, do not share it publicly. Only pages that played are recorded (got a playback URL, requested media, were marked or speed tested); Bilibili pages without playback (user spaces, feeds, articles, etc.) are not. Records from before 0.6.23 still contain paths of such pages; to remove them, export first and then clear all.
+        "Playback sessions" are sessions with media requests; "Recorded sessions" are sessions written to the records (since 0.6.23 only pages that played; earlier records count every Bilibili page opened).
+        TTFB is the time from sending a request to receiving the response headers. Requests answered straight from the browser cache (headers in under 10 ms) are excluded; most requests marked as cached (fc) in the records still asked the node and are counted (before 0.6.27 they were not).
+        Mbps counts only responses of 512 KB or more that took over 50 ms (live segments are too small; look at TTFB instead).
+        Requests aborted by the player (seeking, quality switch) are not failures, but those aborted after waiting 1.9 s or more count as timeout failures (players mostly give up at 2, 5 or 10 s).
+        "Auto-detected stalls" include buffering of 1 s or more (not counting seeks), startup over 5 s and failed starts; the node table counts only times the node was the main responsible node.
+        Stalls are not counted while the page is in the background (the browser plays only audio there); buffering to restore the picture after returning to the foreground, and startups timed partly in the background, are still recorded but not counted against nodes.
+        "Marked" is the number of manual stall marks for which the node was a main responsible node within 60 s before the mark; A/V out of sync marks and marks judged as dropped frames or buffer OK do not count.
+        Responsibility is split by how long requests were in flight (sent but not finished): the node in flight longest is the main responsible node, and nodes with at least half of that also count; in the mark records, faded nodes carry less responsibility.
+        The "Cause" of a manual mark looks at the player at that moment: buffer ahead used up, spinning, or a stall within 30 s means low buffer (network / node); enough buffer but 5% or more frames dropped in the last 10 s means dropped frames (decoding / rendering, not the node).
+        "Speed test" is the median sustainable rate (Mbps) estimated by the auto speed test: it fetches data piece by piece like the player, counts the time to first byte, and records failures as 0.
+        PCDN means nodes Bilibili rents on home broadband, P2P and the like: mcdn subdomains, hosts with a port or a bare IP, upos nodes that redirect (302) to PCDN, etc. Route optimization ranks them after the official CDN.
+      </p></details>
+    </div>
+    <dialog id="export-dialog" class="dialog" aria-labelledby="export-title">
+      <form id="export-form">
+        <div id="export-choose" class="dialog-step">
+          <h2 id="export-title" data-en="Export records">导出记录</h2>
+          <p class="muted" data-lang="zh">导出「<span class="export-range">安装以来</span>」的记录，存成 JSON 文件。</p>
+          <p class="muted" data-lang="en" hidden>Export records from "<span class="export-range">Since install</span>" as a JSON file.</p>
+          <fieldset class="export-options">
+            <legend data-en="Export type">导出方式</legend>
+            <label class="export-option">
+              <input type="radio" name="kind" value="redacted" checked />
+              <span><b data-en="Standard export (redacted)">普通导出（脱敏）</b><span class="muted" data-en="Use this for analysing problems in an issue. Sessions without problems get their page URLs and video IDs replaced, and the network location keeps only country and ISP. Video and live room URLs and mark notes of sessions with problems (stalls, slow or failed starts, manual marks), as well as node hosts and IPs (including PCDN), are kept; check the notes before sharing.">发到 issue 里分析问题用这个。没出问题的会话换掉页面地址和视频编号，网络位置只留国家和 ISP。出过问题（卡顿、起播慢、没能起播、手动标记）的视频和直播间地址、标记备注，以及节点的 host 和 IP（含 PCDN）照样保留，分享前看一眼备注。</span></span>
+            </label>
+            <label class="export-option">
+              <input type="radio" name="kind" value="full" />
+              <span><b data-en="Full export">完整信息导出</b><span class="muted" data-en="Exports all records as they are. Only for locating and analysing bugs; do not share publicly.">原样导出全部记录，只用于定位、分析 bug，不要公开分享。</span></span>
+            </label>
+          </fieldset>
+          <div class="dialog-actions"><button type="button" id="export-cancel" data-en="Cancel">取消</button><button type="submit" class="primary" data-en="Export">导出</button></div>
+        </div>
+        <div id="export-confirm" class="dialog-step" hidden>
+          <h2 id="export-confirm-title" data-en="Export full information?">确认导出完整信息？</h2>
+          <p data-en="A full export contains all records as they are. Besides node and playback data, it includes:">完整信息导出原样导出全部记录，除了节点和播放的数据，还包含：</p>
+          <ul>
+            <li data-en="The page URL and video ID of every video and live room watched, and when">看过的每个视频和直播间的页面地址、视频编号，以及看的时间</li>
+            <li data-en="Network location history: the country, region, city and ISP Bilibili detected, and when they changed">网络位置历史：B 站识别的国家、地区、城市和 ISP，以及什么时候变的</li>
+            <li data-en="IPs of the CDN and PCDN nodes connected to (PCDN is mostly other people's home broadband)">连到的 CDN 和 PCDN 的 IP（PCDN 多是别人家里的宽带）</li>
+            <li data-en="Notes written when marking problems">手动标记时写的备注</li>
+          </ul>
+          <p class="export-warn" data-en="This data is only for locating and analysing bugs; do not share it publicly (no issues, forums or group chats). To share, go back and choose the standard export.">这份数据只用于定位、分析 bug，不要公开分享（不要贴到 issue、论坛或群里）。要分享请返回，选普通导出。</p>
+          <div class="dialog-actions"><button type="button" id="export-back" data-en="Back">返回</button><button type="submit" class="confirm-danger" data-en="Export full information">确认导出完整信息</button></div>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="keep-dialog" class="dialog" aria-labelledby="keep-title" aria-describedby="keep-text">
+      <form id="keep-form" class="dialog-step">
+        <h2 id="keep-title" data-en="Change retention">改保留时长</h2>
+        <p id="keep-text"></p>
+        <div class="dialog-actions"><button type="button" id="keep-cancel" data-en="Cancel">取消</button><button type="submit" id="keep-ok" class="confirm-danger" data-en="Delete">删除</button></div>
+      </form>
+    </dialog>
+    <script src="../shared/cdn.js"></script>
+    <script src="../shared/route.js"></script>
+    <script src="../shared/probe.js"></script>
+    <script src="../shared/store.js"></script>
+    <script src="../shared/analyze.js"></script>
+    <script src="../shared/redact.js"></script>
+    <script src="../ui/format.js"></script>
+    <script src="stats.js"></script>
+  </body>
+</html>
