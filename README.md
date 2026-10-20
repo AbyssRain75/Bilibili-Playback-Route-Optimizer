@@ -1,104 +1,175 @@
 # Bilibili Playback Route Optimizer
 
-English | [简体中文](README.zh-CN.md)
+简体中文 | [English](README.en.md)
 
-A Chrome and Edge extension that observes and optimizes the CDN routes used by Bilibili (bilibili.com) videos and live streams.
+一个用于 Chrome 和 Edge 的 B 站播放线路扩展。可以查看视频和直播实际使用的 CDN 节点、记录卡顿，也可以尝试换一条更合适的线路。
 
-By default it runs in **observe mode**: it only records, and changes nothing. It records which nodes the player was assigned, which nodes the media actually came from, each node's time to first byte and throughput, and where playback stalled. Turn on **Route optimization** and the extension rewrites the playback URLs before the player receives them, moving to faster nodes and away from nodes that recently stalled and from PCDN. Turn on **Auto speed test** and it measures the nodes while the buffer is healthy, and uses the results to pick nodes. Both switches are off by default.
+安装后默认进入**观察模式**：记录播放和连接情况，线路仍由 B 站选择。想让扩展参与选节点，可以打开**线路优化**；打开**自动测速**后，还会在缓冲充足时测量可用节点的速度。这两个选项默认都关闭。
 
-> This project is not affiliated with Bilibili and is not an official tool.
+本项目由个人维护，与哔哩哔哩无关。优化效果取决于当前网络、播放内容和可用节点，换线路无法解决所有播放问题。
 
-## Features
+[安装](#安装) · [操作指南](#操作指南) · [更新与数据保留](#更新与数据保留) · [常见问题](#常见问题) · [隐私](#隐私)
 
-- **Observe and record**: the node assignment of every playback; each media request's node, IP, time to first byte, throughput and failures; startup time and stalls. See the current page in the popup and the totals on the stats page.
-- **Route optimization** (off by default):
-  - Videos: pin a node, or choose "Auto". Auto avoids nodes that stalled in the last 30 minutes, moves off PCDN to official nodes, and with speed test results only switches when a node scores at least 20% higher than the assigned one, so it doesn't flip back and forth. The original URLs stay as backups, and the player falls back to them if the new node fails.
-  - Live: choose FLV or HLS among the lines Bilibili provides, and within a line put PCDN after official hosts and recently stalled hosts last. Auto switches to the other format when one keeps stalling at the current quality, and to FLV when HLS speed tests can't keep up with the bitrate.
-- **Auto speed test** (off by default): while a Bilibili page is playing, one round every 30 seconds, and only when the buffer is healthy (videos: at least 15 seconds ahead, or paused; live: at least 1 second), so it doesn't compete with playback. Each node downloads at most 512 KB, up to about 2 MB per round, and nodes that test poorly are tested less often. Results are kept per network and reused when you're back on the same network.
-- **Stall detection and manual marks**: detects buffering stalls, slow starts and failed starts, and splits the blame among the nodes by their requests at the time. When playback feels bad, mark it with the flag on the player's control bar, the buttons in the popup, or Alt+Shift+K. A mark also records the buffer ahead and dropped frames, which tells network problems apart from decoding that can't keep up.
-- **Stats page**: node table (requests, failure rate, first byte, throughput, speed tests, stalls), manual marks, session timeline and network changes, filtered by today, this week or since install, with JSON export.
-- **English and Chinese UI**: follows the browser's UI language, and can be switched at the top right of the popup and the stats page.
+## 能做什么
 
-PCDN (MCDN) nodes are home broadband and P2P nodes Bilibili rents. They are generally less stable and slower across networks than the official CDN, especially outside mainland China.
+- **查看当前播放情况**：在扩展面板里看前方缓冲、掉帧、卡顿次数，以及实际提供音视频数据的节点。
+- **选择播放线路**：点播可以自动选节点，也可以手动指定；直播可以自动选择，或优先使用 B 站提供的 FLV、HLS 线路。原地址会保留为备用。
+- **在缓冲充足时测速**：打开自动测速后，有 B 站页面在播放时每 30 秒尝试测一轮，缓冲不足就暂缓。结果按网络分别保存。
+- **记录播放问题**：自动识别缓冲卡顿、起播慢和无法起播，也能通过播放器按钮、扩展面板或快捷键手动标记。
+- **回看与导出记录**：统计页汇总节点表现、问题标注、播放会话和网络变化，可以导出 JSON，用于分析和反馈问题。
+- **切换中英文界面**：默认跟随浏览器界面语言，也可以在扩展面板和统计页手动切换。
 
-## Install
+PCDN（也叫 MCDN）使用家庭宽带、P2P 等节点，不同网络下的表现可能差别很大。自动选线会避开 PCDN 和近期卡过的节点，但不会把某一个节点当成所有网络下的最优选择。
 
-Requires Chrome or Edge 120 or later. The extension is not in the extension stores yet; install it with "Load unpacked":
+## 安装
 
-1. Download the latest `Bilibili-Playback-Route-Optimizer-<version>-chromium.zip` from [Releases](https://github.com/AbyssRain75/Bilibili-Playback-Route-Optimizer/releases) and unzip it into a folder in a fixed location.
-2. Open `chrome://extensions` (`edge://extensions` in Edge) and turn on Developer mode (at the bottom of the left sidebar in Edge).
-3. Click "Load unpacked" and select the unzipped folder (the one that directly contains `manifest.json`).
-4. Reload any Bilibili pages that are already open: the extension only works on pages loaded after it was installed.
+需要 **Chrome 或 Edge 120 及以上版本**。扩展尚未上架商店，目前通过加载本地文件夹安装。Firefox 暂不支持。
 
-You can also `git clone` this repository and load its `chromium` folder; it has the same content as the zip.
+### 1. 下载并解压
 
-Edge puts the extension icon in the puzzle-piece menu on the toolbar; you can choose "Show in toolbar".
+打开[最新版本的发布页](https://github.com/AbyssRain75/Bilibili-Playback-Route-Optimizer/releases/latest)，在 **Assets** 中下载：
 
-A Firefox version is in progress and not usable yet.
+```text
+Bilibili-Playback-Route-Optimizer-<版本>-chromium.zip
+```
 
-### Update
+将它解压到一个准备长期保留的文件夹。请选择上面这个扩展包；GitHub 自动生成的 **Source code (zip)** 和 **Source code (tar.gz)** 是仓库源码归档。扩展包解压后，根目录里就有 `manifest.json`。
 
-Download the new zip, empty the old folder and unzip the new version into it, keeping the folder in the same place (or `git pull` in the repository). Then click the reload button on the extension's card on the extensions page, and reload your Bilibili pages. Records and settings are kept.
+### 2. 在浏览器里加载
 
-- **Don't click "Remove"**: removing the extension deletes all of its data.
-- **Don't move the folder**: unpacked extensions are told apart by their folder path; in a new location it is a different extension with no data.
-- To be safe, export a JSON from the stats page before updating.
+| 浏览器 | 在地址栏打开 | 操作 |
+|---|---|---|
+| Chrome | `chrome://extensions` | 打开「开发者模式」，点击「加载已解压的扩展程序」 |
+| Edge | `edge://extensions` | 打开「开发人员模式」，点击「加载解压缩的扩展」 |
 
-## Usage
+把上表中的地址复制到浏览器地址栏。在文件夹选择窗口里，选择**直接包含 `manifest.json` 的那一层文件夹**；如果解压软件多套了一层目录，需要再往里打开一层。
 
-Click the extension icon on the toolbar to open the popup:
+看到 **Bilibili Playback Route Optimizer** 出现在扩展列表里后，确认它处于启用状态。打开工具栏上的拼图菜单，在 Chrome 中固定图标，或在 Edge 中选择「在工具栏中显示」，以后就能直接打开。
 
-- **On** at the top right is the main switch. Turn it off to pause the whole extension (no recording, no rewriting, no speed tests); Bilibili plays as usual.
-- Under **Route settings**, turn on **Route optimization** and **Auto speed test**, and choose the video node and the live protocol. Changes apply to videos and live rooms loaded afterwards; reload the page you are watching.
-- **Report a problem**: few stalls, many stalls, won't play, A/V out of sync. You can add a note or undo.
-- **Advanced** has recent problems, speed test results and node details.
-- **Stats** at the top right opens the stats page.
+### 3. 确认安装成功
 
-The flag on the right of the player's control bar marks "Many stalls" with one click. Hover over it to see the current playback status (buffer ahead, dropped frames, bitrate, the node in use and its download speed) and the mark menu. You can turn it off in the popup.
+1. 刷新之前已打开的 B 站页面，再播放一个视频或进入直播间。
+2. 点击工具栏上的扩展图标，打开扩展面板。
+3. 确认右上角的**启用**已打开，模式显示为**观察模式**。「当前播放」应显示正在看的页面，并逐渐出现播放数据。
 
-Alt+Shift+K marks "Many stalls" directly. Change it at `chrome://extensions/shortcuts` (`edge://extensions/shortcuts` in Edge).
+此时扩展已经开始记录。想使用自动选线，继续按下面的步骤设置即可。
 
-Good to know:
+习惯用 Git 的话，也可以克隆本仓库，然后加载其中的 `chromium/` 文件夹，不需要安装 Node.js 或执行构建。浏览器加载步骤也可参考 [Chrome 官方说明](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked)和 [Edge 官方说明](https://learn.microsoft.com/en-us/microsoft-edge/extensions/getting-started/extension-sideloading)。
 
-- URLs are only rewritten when the player fetches them, so the video you are watching switches nodes after a page reload (or on the next video).
-- Live streams can only choose among the lines Bilibili provides; other hosts refuse the stream.
-- Speed tests fetch a random range from the middle of the file. Edge cache nodes (such as Akamai) that don't have it cached fetch it from upstream, so their score can be lower than what they deliver during playback.
+## 操作指南
 
-## Privacy
+### 打开线路优化
 
-- Records are stored only in the browser's extension storage on your device. Nothing is uploaded, and there is no analytics service.
-- The extension itself only sends two kinds of requests: a query to Bilibili's API (`api.bilibili.com/x/web-interface/zone`, without cookies) for the current network's country, region, city and ISP, used to keep speed test results per network (the IP is not stored); and, with Auto speed test or Route optimization on, speed tests to Bilibili's CDN nodes.
-- Only pages with playback are recorded; pages without playback, such as user spaces and feeds, are not.
-- Records are kept for 15 days by default. Change it under "Keep records" at the top right of the stats page, from 7 days to 6 months; older records are deleted automatically.
-- JSON export defaults to the **standard export** (redacted): for sessions without problems, page URLs and video IDs are replaced with numbers, and the network location keeps only country and ISP. Use it when reporting problems. The **full export** includes every page watched, the network location history and node IPs; don't share it publicly.
+1. 打开一个 B 站视频或直播间，点击扩展图标。
+2. 在**线路设置**中打开**线路优化**。如果希望扩展边看边积累测速结果，再打开**自动测速**。
+3. 初次使用可以把**点播节点**和**直播线路**都设为**自动**。
+4. 刷新 B 站页面，让播放器重新获取播放地址，按新设置开始播放。
 
-## Permissions
+两个开关可以单独使用。只开自动测速时，会积累测速结果，播放仍走 B 站原来的线路；只开线路优化时，也会参考近期问题和已有测速结果，选线过程中还可能触发复测。
 
-| Permission | Used for |
+点播自动选线会避开近 30 分钟卡过的节点。如果 B 站分配的官方节点近期没有问题，候选节点的得分至少高出 20% 才会切换，避免为了很小的差别频繁换线。还没有测速结果、也没有卡顿证据时，继续使用原节点是正常的。
+
+想试某个点播节点，可以在**点播节点**中手动选择，再刷新页面；效果不好就改回**自动**。直播在自动模式下仍不顺畅时，可以分别尝试 **FLV优先**和 **HLS优先**。直播只能在 B 站为这个房间提供的线路和格式中选择。
+
+### 看懂当前播放状态
+
+切到正在播放的 B 站标签页，再打开扩展面板。**当前播放**会显示前方缓冲、近期掉帧、会话卡顿和正在用的节点；展开**高级**可以看**近期问题**、**测速结果**和**节点明细**。
+
+这几个指标需要放在一起看：
+
+| 看到的情况 | 可以怎么判断和处理 |
 |---|---|
-| `storage`, `unlimitedStorage` | Keeping settings, records and speed test results on your device. Records can grow past the default extension storage quota |
-| `webRequest` | Observing the node, IP, time to first byte, throughput and failures of Bilibili media requests. Read-only: nothing is blocked or modified |
-| `alarms` | The 30-second timer for Auto speed test |
-| `declarativeNetRequestWithHostAccess` | Adding Bilibili's Referer (required by the CDN) to the extension's own speed test requests only; page requests are not affected |
-| `*.bilibili.com` | Running scripts on Bilibili pages: reading and rewriting playback URLs, recording startup and stalls, showing the mark button on the player; querying the network location |
-| `*.bilivideo.com`, `*.bilivideo.cn`, `*.akamaized.net`, `*.szbdyd.com` | Bilibili's CDN and PCDN domains: observing media requests and speed tests |
+| 缓冲很少，播放器反复转圈 | 网络或当前节点可能供不上数据。先标记问题；开着线路优化时，可以刷新后试另一条线路 |
+| 缓冲充足，但掉帧明显 | 可能是解码或渲染跟不上，可以尝试降低画质、检查硬件解码 |
+| 缓冲充足，掉帧也少 | 当前播放有足够的数据余量，未必需要换节点 |
 
-## Reporting problems
+测速会等待缓冲充足：点播至少有 15 秒前方缓冲，或处于暂停状态；直播至少有 1 秒缓冲。每个节点最多下载 512 KB，一轮最多约 2 MB，表现差的节点会减少测试频率。因此，刚安装时没有测速结果，或者缓冲不足时测速暂停，都是正常情况。
 
-Describe the problem in [Issues](https://github.com/AbyssRain75/Bilibili-Playback-Route-Optimizer/issues), ideally with a file from "Export JSON" → "Standard export" on the stats page (check the notes in it before posting).
+### 播放不顺时做个标记
 
-## Credits
+观看时可以选一种顺手的方式：
 
-These projects inspired some of the ideas; no code from them is used:
+- **播放器按钮**：点击控制栏右侧的小旗子，记为「较多卡顿」。鼠标移上去可以看播放状态，也能选择其他问题类型。
+- **扩展面板**：在**手动问题标注**中选择「少量卡顿」「较多卡顿」「无法播放」或「音画不同步」。需要备注的话，先写备注，再点问题按钮。
+- **快捷键**：按 **Alt+Shift+K**，不打开面板也能标记「较多卡顿」。
 
-- [stabruriss/bilibili-accelerator](https://github.com/stabruriss/bilibili-accelerator): speed tests only when the buffer is healthy, recognizing PCDN and ranking it last, not forging Akamai signatures.
-- [bilibili-cdn-switcher](https://github.com/a0972199950/bilibili-cdn-switcher): keeping the original URLs as backups, and falling back to Bilibili's own backup nodes first on errors.
-- [Shaka Player](https://github.com/shaka-project/shaka-player)'s grouped playback statistics, and [enhanced-h264ify](https://github.com/alextrv/enhanced-h264ify)'s notes on hardware decoding.
+点错了可以在面板里**撤销**。不需要小旗子时，关闭**播放器标记按钮**即可。快捷键可以在 `chrome://extensions/shortcuts` 或 `edge://extensions/shortcuts` 中修改；按了没反应时，先检查这个组合键是否被其他快捷键占用。
 
-## License
+标记会同时保存当时的缓冲和掉帧情况。判断为解码或渲染问题的标记，以及音画不同步标记，不会算作节点卡顿。如果面板出现**刷新换节点**按钮，可以在方便中断播放时点击，重新尝试选线。
+
+### 查看统计、导出记录
+
+点击面板右上角的**统计**，先选**本日**、**本周**或**安装以来**，再查看**节点表现**、**问题标注**、**会话时间轴**和**网络与页面**。范围只覆盖仍保留的记录，「安装以来」不会恢复已经过期删除的数据。
+
+记录默认保留 **15 天**。统计页右上角的**记录保留**可以改为 7 天到 6 个月；如果缩短保留时长会导致记录被删除，页面会先请你确认。
+
+反馈问题时，选一个包含问题发生时间的范围，点击**导出 JSON**，选择**普通导出（脱敏）**。这份文件保留了分析所需的数据，也仍包含节点域名和 IP，以及出过问题的视频、直播间地址和备注，分享前请检查一下。**完整信息导出**包含全部保留的浏览和网络详情，请自行保管。
+
+### 暂停扩展、切换语言
+
+关闭面板右上角的**启用**，扩展就会暂停记录、改写播放地址和测速，设置与已有记录会保留。重新启用后，刷新 B 站页面，才能完整记录当前播放。
+
+只想恢复 B 站自己的选线，可以关闭**线路优化**并刷新页面；如果也不想继续定时测速，再关闭**自动测速**。
+
+面板和统计页右上角的 **EN / 中文**按钮可以切换界面语言，播放器上的按钮也会一起切换。
+
+## 更新与数据保留
+
+1. 更新前可以先在统计页导出一份记录，留作备份。
+2. 下载并解压新版扩展包，确认里面有 `manifest.json`。
+3. 清空**原来加载的扩展文件夹**，把新版文件复制进去，保持文件夹路径不变。通过 Git 安装的，在仓库中执行 `git pull` 即可。
+4. 打开浏览器的扩展管理页，点击扩展卡片上的**重新加载**按钮。
+5. 刷新已经打开的 B 站页面。
+
+记录和设置保存在浏览器的扩展存储中，替换文件并重新加载会保留它们。**不要移除扩展，也不要移动文件夹**：移除会删除扩展数据；从另一个路径加载未打包扩展，可能会被识别为新的扩展。
+
+## 常见问题
+
+| 问题 | 处理方法 |
+|---|---|
+| 加载时提示找不到 `manifest.json` | 先解压 zip，再选择直接包含这个文件的目录 |
+| 工具栏找不到扩展图标 | 打开浏览器扩展菜单，确认扩展已启用，再固定图标或选择在工具栏中显示 |
+| 面板里没有播放数据 | 切到 B 站视频或直播间标签页，确认「启用」已打开，再刷新页面并开始播放 |
+| 改了设置，但节点没变 | 刷新页面。选线发生在重新获取播放地址时；自动模式判断没有必要切换时，也会保留原节点 |
+| 测速结果一直是空的 | 确认「自动测速」已打开，让页面开始播放，等待缓冲充足后再给它一轮测速的时间 |
+| 测速分数很高，播放还是卡 | 标记问题后再试自动选线。短时测速无法覆盖每次请求，未缓存的内容也可能需要更长的等待时间 |
+| 打开优化后反而不好用 | 关闭「线路优化」并刷新页面；需要与纯观察模式对比时，也关闭「自动测速」 |
+| 更新后按钮没反应 | 重新加载扩展后，再刷新 B 站页面，让页面脚本与新版扩展保持一致 |
+
+仍然遇到问题，可以到 [Issues](https://github.com/AbyssRain75/Bilibili-Playback-Route-Optimizer/issues) 反馈，写明浏览器和扩展版本、点播还是直播、线路设置以及复现步骤。能附上覆盖问题时段的普通导出文件，会更方便定位。
+
+## 隐私
+
+- 记录只保存在本机浏览器的扩展存储里，扩展不会上传记录，也没有接入统计分析服务。
+- 扩展会向 B 站的网络位置接口（`api.bilibili.com/x/web-interface/zone`，不带 cookie）查询网络信息，用来区分不同网络下的测速结果。保存 B 站返回的国家、地区、城市和 ISP，不保存你的公网 IP；媒体请求中的 CDN 节点 IP 会作为诊断数据记录。
+- 打开自动测速或线路优化后，扩展可能向 B 站 CDN 节点发起测速请求，会产生前文所述的额外流量。
+- 只记录有播放活动的页面；个人空间、动态等页面没有播放活动时不记录。
+- 过期记录会自动清理。普通导出只对部分信息脱敏，仍保留问题会话的地址、标记备注和节点 IP；分享前请检查内容，完整导出请勿公开分享。
+
+## 权限说明
+
+| 权限 | 用途 |
+|---|---|
+| `storage`、`unlimitedStorage` | 在本机保存设置、记录和测速结果，允许记录超过扩展存储默认的容量上限 |
+| `webRequest` | 观察媒体请求的节点、IP、耗时、速率和失败情况；这个监听过程不拦截、不修改请求 |
+| `alarms` | 每 30 秒调度一轮自动测速 |
+| `declarativeNetRequestWithHostAccess` | 只为扩展自己发出的测速请求添加 CDN 要求的 B 站 Referer，不影响页面请求 |
+| `*.bilibili.com` | 读取播放信息、在线路优化开启时改写播放地址、识别卡顿、显示播放器按钮和查询网络位置 |
+| `*.bilivideo.com`、`*.bilivideo.cn`、`*.akamaized.net`、`*.szbdyd.com` | 观察媒体请求，测试 B 站 CDN 和 PCDN 节点 |
+
+## 参考
+
+以下项目为设计提供了思路，本项目没有使用它们的代码：
+
+- [stabruriss/bilibili-accelerator](https://github.com/stabruriss/bilibili-accelerator)：缓冲充足时测速、识别并降低 PCDN 优先级、遵循 Akamai 签名限制。
+- [bilibili-cdn-switcher](https://github.com/a0972199950/bilibili-cdn-switcher)：保留原地址作为备用，出错时尝试 B 站自己的备用节点。
+- [Shaka Player](https://github.com/shaka-project/shaka-player)：按组统计播放情况的思路。
+- [enhanced-h264ify](https://github.com/alextrv/enhanced-h264ify)：硬件解码能力的相关说明。
+
+## 许可证
 
 Copyright (C) 2026 AbyssRain75
 
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version (SPDX: `GPL-3.0-or-later`).
+本程序以 GNU 通用公共许可证**第 3 版或（由你选择）任何更新的版本**（`GPL-3.0-or-later`）发布，你可以按许可证条款再分发和修改。
 
-This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the [LICENSE](LICENSE) file for the full text of the GNU General Public License version 3; the extension folder and the zip carry a copy too.
+本程序不提供任何担保，包括对适销性或特定用途适用性的默示担保。完整条款见 [LICENSE](LICENSE)（英文原文），扩展文件夹和发布的 zip 中也各带一份。
