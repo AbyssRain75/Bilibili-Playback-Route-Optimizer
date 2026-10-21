@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // ISOLATED world：把 hook.js 发出的页面事件转发给 service worker，并把扩展设置传给 hook.js。
 // 刻意不依赖任何共享脚本：同一个文件同时列在 MAIN 和 ISOLATED 两组 content_scripts 里时，
 // 浏览器只会注入一次，ISOLATED world 里就拿不到它定义的全局对象。页面类型由 SW 根据 href 判断。

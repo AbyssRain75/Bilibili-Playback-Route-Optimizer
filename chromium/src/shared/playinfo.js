@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // 从各种播放接口 / 首屏数据里提取 CDN 分配情况。
 // 各页面的数据嵌套层级不同（playurl、pgc、__NEPTUNE_IS_MY_WAIFU__、__NEXT_DATA__），
 // 所以按数据形状查找，而不是写死路径。线路改写（route.js）也用这里的查找函数，记下的分配和改写的才是同一批轨道和线路。

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Service worker：汇总页面事件（分配、起播、卡顿、线路切换）和 webRequest 观察到的实际媒体请求，
 // 写入持久记录，维护各标签页的实时概况供 popup 显示；开启测速时定时测各节点；
 // 记下各节点近期出过的问题（卡顿证据），线路优化的“自动”模式据此避开。

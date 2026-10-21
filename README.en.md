@@ -10,6 +10,8 @@ This is an independent project, with no affiliation to Bilibili. Results depend 
 
 [Installation](#installation) · [Usage guide](#usage-guide) · [Updating](#updating-without-losing-records) · [Troubleshooting](#troubleshooting) · [Privacy](#privacy)
 
+See the [full user guide](docs/usage.en.md) ([简体中文](docs/usage.md)) for detailed steps, setting defaults, route selection, and speed test rules.
+
 ## What it does
 
 - **Shows the current playback state.** Check the buffer, dropped frames, stalls, and nodes actually serving the video in the extension panel.
@@ -170,6 +172,6 @@ These projects informed the design. No code from them is included:
 
 Copyright (C) 2026 AbyssRain75
 
-This program is free software, licensed under the GNU General Public License, **version 3 or (at your option) any later version** (`GPL-3.0-or-later`). You may redistribute and modify it under those terms.
+This program is free software, licensed under the GNU Affero General Public License, **version 3 or (at your option) any later version** (`AGPL-3.0-or-later`). You may redistribute and modify it under those terms.
 
 It is provided without warranty, including any implied warranty of merchantability or fitness for a particular purpose. See [LICENSE](LICENSE) for the full terms. A copy is included in both the extension folder and the release zip.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // 共享工具：host 分类、媒体请求识别、页面类型。
 // 经典脚本，MAIN world、service worker（importScripts）、扩展页面和 Node 测试共用。
 (function (root) {

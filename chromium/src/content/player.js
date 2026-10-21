@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // ISOLATED world：读播放器状态，在播放器控制栏上放标记卡顿的按钮。
 //   - 手动标记时 SW 向页面要播放器状态（卡顿点）：播放位置、前方缓冲、就绪状态、近 10 秒掉帧，据此判断是网络卡还是画面卡；
 //   - 标记按钮：点一下记为“较多卡顿”，悬停显示当前播放状态（缓冲、码率、在用的节点和下载速度）和标记菜单，

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // 记录持久化：缓冲后按块追加写入 chrome.storage.local，避免每次重写全部数据。
 // service worker 负责写入；统计页通过 readAll 读取（读之前先让 SW flush）。
 // 每次写入都要重写最后一块，而 storage.onChanged 会把这一块的新旧内容发给每个 B 站页面里的内容脚本，

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // 自动测速：测速得分和排名，什么时候测、测哪几个（缓冲、退避、间隔、复测），网络档案，同一台服务器的几个镜像名，以及测速候选和取数范围。
 // 只有 service worker 和扩展页面（popup、统计页）用，不注入页面：页面里改写播放地址、取测速地址只要 route.js（见 manifest 的 MAIN world 脚本）。
 // 经典脚本，service worker（importScripts）、扩展页面和 Node 测试共用；浏览器里要在 cdn.js、route.js 之后加载。

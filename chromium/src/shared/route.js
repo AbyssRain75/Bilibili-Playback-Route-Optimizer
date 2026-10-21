@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // 线路切换（M2）：按设置、测速结果和近期卡顿改写播放地址，以及改写要用的卡顿证据汇总、测速结果的键和取测速地址。
 // 点播：同一个地址可以换到其他 UPOS 镜像（路径和签名通用），也可以把分配里的备用节点提到前面；
 // 直播：换 host 会 403 / 404，只能在 B 站给的线路之间选：只保留 FLV 或 HLS，并按测速排列同一线路的 host。

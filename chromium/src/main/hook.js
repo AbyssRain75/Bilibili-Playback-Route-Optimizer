@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // MAIN world，document_start 注入：
 //   - 捕获播放地址分配：fetch / XHR 的播放接口响应，以及首屏全局变量；
 //   - 开启线路优化时按设置改写播放地址（规则见 route.js），开启测速时把测速用的地址交给 SW；

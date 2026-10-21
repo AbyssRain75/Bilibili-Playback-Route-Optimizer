@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // 统计页的导出：按范围选记录、组装导出文件，以及「普通导出」的脱敏。经典脚本，扩展页面和 Node 测试共用。
 //
 // 脱敏的范围是用户定的（2026-10-21）：导出多半是贴到 issue 里分析问题的，分析节点要用的都留着——

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // 对持久记录做汇总统计（统计页使用，也方便之后离线分析导出的数据）。
 (function (root) {
   'use strict';

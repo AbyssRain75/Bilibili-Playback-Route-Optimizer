@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // 扩展页面共用的格式化与渲染小工具。
 const Fmt = (() => {
   'use strict';
