@@ -37,7 +37,28 @@
         <button type="button" data-period="all" aria-pressed="true" disabled data-en="Since install">安装以来</button>
       </div>
       <section class="tiles" id="tiles"></section>
-      <nav class="section-nav" aria-label="报告章节" data-en-aria-label="Report sections"><a href="#node-section" data-en="Nodes">节点表现</a><a href="#mark-section" data-en="Problem marks">问题标注</a><a href="#timeline-section" data-en="Session timeline">会话时间轴</a><a href="#environment-section" data-en="Network &amp; pages">网络与页面</a></nav>
+      <nav class="section-nav" aria-label="报告章节" data-en-aria-label="Report sections"><a href="#map-section" data-en="Node map">节点分布</a><a href="#node-section" data-en="Nodes">节点表现</a><a href="#mark-section" data-en="Problem marks">问题标注</a><a href="#timeline-section" data-en="Session timeline">会话时间轴</a><a href="#environment-section" data-en="Network &amp; pages">网络与页面</a></nav>
+      <!-- 节点分布：按网络汇总分到的节点、服务器和表现（见 shared/nodemap.js），「探查」把当前播放的候选节点各测一次（见 sw.js startSurvey） -->
+      <section class="card" id="map-section">
+        <div class="card-head">
+          <h2 data-en="Node map by network">节点分布</h2>
+          <div class="map-tools">
+            <select id="map-net" aria-label="选择网络" data-en-aria-label="Choose network"></select>
+            <button id="survey" class="primary" disabled data-en="Survey this network">探查这个网络</button>
+          </div>
+        </div>
+        <p class="muted note map-intro" data-lang="zh">按网络（B 站识别的国家、地区和 ISP）分开汇总：不同地方分到的节点不一样，同一个节点在不同地方的快慢也不一样，一个网络的结论不能套到另一个网络。「探查」把正在播放的视频或直播间的候选节点各测一次（点播二十来个，约 10 MB），缓冲不够时先等，测速开关关着也能用。</p>
+        <p class="muted note map-intro" data-lang="en" hidden>Summarised per network (country, region and ISP as Bilibili detects them): different places get different nodes, and the same node can be fast in one place and slow in another, so conclusions from one network don't carry over to another. "Survey" speed-tests every candidate node of the video or live room that is playing once (about twenty for videos, roughly 10 MB). It waits while the buffer is low and works even with auto speed test off.</p>
+        <p class="survey-status" id="survey-status" role="status" hidden></p>
+        <ul class="findings" id="map-findings"></ul>
+        <div class="grid-2 map-grid">
+          <div><h3 data-en="Node types">节点类型</h3><div class="scroll" id="map-classes"></div></div>
+          <div><h3 data-en="Names on the same server">同一台服务器的名字</h3><div id="map-groups"></div></div>
+        </div>
+        <h3 data-en="Nodes on this network">这个网络的节点</h3>
+        <div class="scroll" id="map-hosts"></div>
+        <div id="map-compare"></div>
+      </section>
       <section class="card" id="node-section">
         <div class="card-head"><h2 data-en="Node performance">节点表现</h2><span id="host-count" class="muted" role="status"></span></div>
         <div class="filters"><input id="host-search" type="search" aria-label="搜索节点域名" placeholder="搜索节点域名…" data-en-aria-label="Search node hosts" data-en-placeholder="Search node hosts…" /><select id="host-filter" aria-label="筛选节点" data-en-aria-label="Filter nodes"><option value="all" data-en="All nodes">全部节点</option><option value="problem" data-en="With failures or stalls">有失败或卡顿</option><option value="probed" data-en="Speed tested">有测速记录</option><option value="pcdn">PCDN</option></select></div>
@@ -147,6 +168,7 @@
     <script src="../shared/probe.js"></script>
     <script src="../shared/store.js"></script>
     <script src="../shared/analyze.js"></script>
+    <script src="../shared/nodemap.js"></script>
     <script src="../shared/redact.js"></script>
     <script src="../ui/format.js"></script>
     <script src="stats.js"></script>

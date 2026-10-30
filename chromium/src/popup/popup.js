@@ -261,9 +261,11 @@
   const $live = document.getElementById('opt-live');
   const $probe = document.getElementById('opt-probe');
   const $button = document.getElementById('opt-button');
+  const $p2p = document.getElementById('opt-p2p');
   const $enabled = document.getElementById('opt-enabled');
   const $hint = document.getElementById('settings-hint');
   const $mode = document.getElementById('mode');
+  const $themes = [...document.querySelectorAll('input[name="theme"]')];
   // 各项和默认值见 cdn.js DEFAULT_SETTINGS
   let settings = { ...DEFAULT_SETTINGS };
 
@@ -277,7 +279,11 @@
     $live.value = settings.liveProto;
     $probe.checked = settings.probe;
     $button.checked = settings.markButton;
-    $route.disabled = $probe.disabled = $button.disabled = paused;
+    // 关闭 B 站 P2P（测试功能）：开关打开 = 设置 p2p 为 off，默认 site 不改（见 main/hook.js「关闭 B 站 P2P」）
+    $p2p.checked = settings.p2p === 'off';
+    // 页面主题和暂停无关（只换颜色、不碰播放，见 content/theme.js），不跟着禁用
+    for (const r of $themes) r.checked = r.value === settings.theme;
+    $route.disabled = $probe.disabled = $button.disabled = $p2p.disabled = paused;
     $vod.disabled = $live.disabled = paused || !settings.route;
     $hint.textContent = paused ? L('暂停中', 'Paused') : L('下次加载生效', 'Applies on next load');
     $mode.textContent = paused ? L('已暂停', 'Paused') : settings.route ? L('线路优化', 'Route optimization') : L('观察模式', 'Observe mode');
@@ -315,6 +321,8 @@
     $live.addEventListener('change', () => save({ liveProto: $live.value }));
     $probe.addEventListener('change', () => save({ probe: $probe.checked }));
     $button.addEventListener('change', () => save({ markButton: $button.checked }));
+    $p2p.addEventListener('change', () => save({ p2p: $p2p.checked ? 'off' : 'site' }));
+    for (const r of $themes) r.addEventListener('change', () => r.checked && save({ theme: r.value }));
     // 存下后 followLang 收到设置变了，重新加载换语言
     Fmt.langButton(document.getElementById('lang'), save);
   }

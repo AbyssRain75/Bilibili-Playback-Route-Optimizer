@@ -28,6 +28,21 @@
     'upos-sz-mirrorbos.bilivideo.com',
   ];
 
+  // 只在「探查」时测的镜像（见 sw.js runSurvey），地址同样通用。2026-10-29 在本机网络和另外两个地区的测试服务器上实测，
+  // 至少在一处测得通，但三处都比 B 站分配的最快节点慢得多，平时不测，省流量。不同网络分到的节点、各镜像快慢都不一样，
+  // 哪个网络里测得好，就加进那个网络的测速候选（见 bookHosts）。同一天测不通的没列：hwov、kodo、wcs 解析不到，cosbstar1 回 404
+  const SURVEY_MIRRORS = [
+    'upos-sz-mirroralio1.bilivideo.com',
+    'upos-sz-mirrorhwb.bilivideo.com',
+    'upos-sz-mirrorbd.bilivideo.com',
+    'upos-sz-mirrorbdb.bilivideo.com',
+    'upos-sz-estgoss.bilivideo.com',
+    'upos-sz-estgcos.bilivideo.com',
+    'upos-sz-estghw.bilivideo.com',
+    'upos-tf-all-hw.bilivideo.com',
+    'upos-tf-all-tx.bilivideo.com',
+  ];
+
   // ---------------------------------------------------------------- 同一台服务器
 
   // 同一台服务器的几个镜像名：实测 08c / 08h / 08ct / hwo1 / hw 解析到同一组中国移动地址（同一时刻常常是同一个 IP），
@@ -257,11 +272,12 @@
 
   /**
    * 测速排名：每个键（见 route.js lineKey）最近几次得分的中位数（失败记 0），分点播 / 直播给线路优化用；
-   * br 为 HLS 测到的直播码率（判断 HLS 跟不跟得上）；detail 给 popup 显示。
-   * log：{ 键: [{ t, k, h, c, qn, sc, ok, tt, mbps, br }] }，按时间先后。
+   * br 为 HLS 测到的直播码率（判断 HLS 跟不跟得上）；n 为点播各节点测了几次，探查的不算（「自动」要测过几次才换过去，见 route.js PROBE_MIN）；
+   * detail 给 popup 显示。
+   * log：{ 键: [{ t, k, h, c, qn, sc, ok, tt, mbps, br, sv 探查 }] }，按时间先后。
    */
   function probeRank(log, now = Date.now()) {
-    const rank = { t: now, vod: {}, live: {}, br: {}, detail: {} };
+    const rank = { t: now, vod: {}, live: {}, br: {}, n: {}, detail: {} };
     for (const [key, xs] of Object.entries(log)) {
       if (!xs.length) continue;
       const ok = xs.filter((x) => x.ok);
@@ -269,6 +285,7 @@
       const sc = median(xs.map((x) => x.sc));
       const br = median(ok.map((x) => x.br));
       (last.k === 'vod' ? rank.vod : rank.live)[key] = sc;
+      if (last.k === 'vod') rank.n[key] = xs.filter((x) => !x.sv).length;
       if (br) rank.br[key] = br;
       rank.detail[key] = { h: last.h || key, k: last.k, c: last.c || '', qn: last.qn ?? null, sc, n: xs.length, ok: ok.length, tt: median(ok.map((x) => x.tt)), mbps: median(ok.map((x) => x.mbps)), br, t: last.t };
     }
@@ -347,6 +364,22 @@
     return out;
   }
 
+  /**
+   * 这个网络另外要测的点播镜像：档案里测得好、又不在 UPOS_MIRRORS 里的 UPOS 节点，也就是探查时测好的（SURVEY_MIRRORS），
+   * 和 B 站在这个网络分配过的别的镜像名。测得好：7 天内最好的一次不低于档案里最好节点的一半（口径同 bookSlow）；
+   * 档案里还没有测够 3 次的节点时，拿各节点单次最好的比。测得差的不加，免得每个网络都多测一串用不上的镜像。
+   */
+  function bookHosts(entry, now = Date.now()) {
+    const lines = [];
+    for (const [key, line] of Object.entries((entry && entry.lines) || {})) {
+      const xs = line.k === 'vod' ? line.x.filter((x) => x[0] > now - BOOK.maxAge) : [];
+      if (xs.length) lines.push([key, Math.max(...xs.map((x) => x[1]))]);
+    }
+    const known = Object.values(bookKnown(entry, now).vod);
+    const best = known.length ? Math.max(...known) : Math.max(0, ...lines.map((x) => x[1]));
+    return lines.filter(([key, top]) => isUpos(key) && !UPOS_MIRRORS.includes(key) && top > 0 && top >= best * BACKOFF.ratio).map(([key]) => key);
+  }
+
   // 复测（见 sw.js verifySoon）：页面拿到播放地址时，测以往最好的两个和当前主节点里近 10 分钟没测过的
   const VERIFY = { top: 2, fresh: 10 * 60e3 };
 
@@ -419,15 +452,18 @@
     return `bytes=${start}-${start + bytes - 1}`;
   }
 
-  /** 点播测速候选：分配里各节点自己的地址，加上把 UPOS 地址换到各镜像。 */
-  function vodCandidates(urls) {
+  /**
+   * 点播测速候选：分配里各节点自己的地址，加上把 UPOS 地址换到各镜像。
+   * extra：另外要测的 UPOS 镜像（这个网络测得好的，见 bookHosts；探查时再加 SURVEY_MIRRORS），排在内置镜像后面
+   */
+  function vodCandidates(urls, extra = []) {
     const own = new Map(urls.map((u) => [cdn.hostOf(u), u]));
     const tpl = urls.find((u) => isUpos(cdn.hostOf(u)));
-    if (tpl) for (const h of UPOS_MIRRORS) if (!own.has(h)) own.set(h, swapHost(tpl, h));
+    if (tpl) for (const h of [...UPOS_MIRRORS, ...extra]) if (!own.has(h) && isUpos(h)) own.set(h, swapHost(tpl, h));
     return [...own].map(([h, url]) => ({ h, k: 'vod', url }));
   }
 
-  const api = { UPOS_MIRRORS, PROBE_GATE, BACKOFF, CADENCE, BOOK, VERIFY, SAME_SERVER, probeGate, updateBackoff, probePick, restUntil, verifyPick, liveRecheck, netLabel, bookAdd, bookPrune, bookKnown, bookSlow, bookFromRecords, netOf, noteServer, pruneServers, sameServer, probeScore, parseM3u8, probeRank, urlExpiry, probeRange, vodCandidates };
+  const api = { UPOS_MIRRORS, SURVEY_MIRRORS, bookHosts, PROBE_GATE, BACKOFF, CADENCE, BOOK, VERIFY, SAME_SERVER, probeGate, updateBackoff, probePick, restUntil, verifyPick, liveRecheck, netLabel, bookAdd, bookPrune, bookKnown, bookSlow, bookFromRecords, netOf, noteServer, pruneServers, sameServer, probeScore, parseM3u8, probeRank, urlExpiry, probeRange, vodCandidates };
   if (node) module.exports = api;
   else root.__bilicdn = Object.assign(root.__bilicdn || {}, api);
 })(globalThis);

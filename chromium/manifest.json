@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Bilibili Playback Route Optimizer",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "__MSG_description__",
   "default_locale": "en",
   "minimum_chrome_version": "120",
@@ -19,14 +19,14 @@
   "content_scripts": [
     {
       "matches": ["*://*.bilibili.com/*"],
-      "js": ["src/shared/cdn.js", "src/shared/playinfo.js", "src/shared/route.js", "src/main/hook.js"],
+      "js": ["src/shared/cdn.js", "src/shared/playinfo.js", "src/shared/route.js", "src/main/hook.js", "src/main/header-theme.js"],
       "run_at": "document_start",
       "world": "MAIN",
       "all_frames": true
     },
     {
       "matches": ["*://*.bilibili.com/*"],
-      "js": ["src/content/bridge.js", "src/content/player.js"],
+      "js": ["src/content/bridge.js", "src/content/player.js", "src/content/theme.js"],
       "run_at": "document_start",
       "all_frames": true
     }

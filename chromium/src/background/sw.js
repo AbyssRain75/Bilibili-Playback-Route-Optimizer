@@ -5,8 +5,8 @@
 importScripts('../shared/cdn.js', '../shared/store.js', '../shared/analyze.js', '../shared/route.js', '../shared/probe.js');
 
 const { L, setLang, CDN_DOMAINS, CLASS_LABELS, DEFAULT_SETTINGS, isBiliUrl, hostOf, isCdnHost, mediaKind, lineOf, trackOf, cacheHit, mbpsOf, isFailure, isHang, pageType, pageKey, mergeNet, netChanged, netMoved, netKey, isPcdnHost, isPcdnUrl, isPcdnReq, nodeClass, quantile } = globalThis.__bilicdn;
-const { blameHosts, blameHung, incidentOf, hlsLoad, HLS_LOAD, markCause, blamesNode, probeScore, parseM3u8, probeRange, vodCandidates, urlExpiry, lineKey, probeRank, probeGate, updateBackoff, probePick, restUntil, verifyPick, liveRecheck } = globalThis.__bilicdn;
-const { TROUBLE, PROTO_TROUBLE, troubleOf, isBad, noteServer, pruneServers, sameServer, netLabel, bookAdd, bookPrune, bookKnown, bookSlow, bookFromRecords } = globalThis.__bilicdn;
+const { blameHosts, blameHung, incidentOf, hlsLoad, HLS_LOAD, SRC_KEYS, markCause, blamesNode, probeScore, parseM3u8, probeRange, vodCandidates, urlExpiry, lineKey, probeRank, probeGate, updateBackoff, probePick, restUntil, verifyPick, liveRecheck } = globalThis.__bilicdn;
+const { TROUBLE, PROTO_TROUBLE, troubleOf, isBad, PERF, perfEntry, noteServer, pruneServers, sameServer, netLabel, bookAdd, bookPrune, bookKnown, bookSlow, bookFromRecords, bookHosts, SURVEY_MIRRORS } = globalThis.__bilicdn;
 
 // ---------------------------------------------------------------- 状态
 // 各部分共用的内存状态都放在这里。SW 随时会被回收：要留住的存进 storage，重启时由 ready（和下文的 settingsReady）读回。
@@ -15,6 +15,7 @@ let settings = { ...DEFAULT_SETTINGS }; // 扩展设置（见下文「设置」�
 let tabs = {}; // 各标签页的会话（见 newSession），存在 storage.session
 let trouble = []; // 各节点近期出过的问题（卡顿证据，见 addTrouble）
 let protoTrouble = []; // 直播协议的卡顿证据（见 addProtoTrouble）
+let perf = {}; // 页面实际请求各点播 host 的首字节和成败（见 notePerf）
 let book = null; // 网络档案（见 probe.js），升级后第一次启动时从以往的测速记录建（见 bookReady）
 let curNet = ''; // 当前网络的档案键（见 cdn.js netKey）
 let curLabel = '';
@@ -38,15 +39,18 @@ let knownJson = '';
 
 // 会话、进行中的直播长连接和卡顿证据都要先读回来，再接着用、接着追加
 const ready = Promise.all([
-  chrome.storage.session.get(['tabs', 'streams', 'probeState', 'verifyWait']).then((r) => {
+  chrome.storage.session.get(['tabs', 'streams', 'probeState', 'verifyWait', 'survey']).then((r) => {
     tabs = r.tabs || {};
     restoreStreams(r.streams);
     probeState = r.probeState || null;
     verifyWait = r.verifyWait || {};
+    // SW 被回收时正在探查的，跟着停下了（见 runSurvey）
+    if (r.survey && !r.survey.end) chrome.storage.session.set({ survey: { ...r.survey, end: 'stop', te: Date.now() } }).catch(() => {});
   }),
-  chrome.storage.local.get(['trouble', 'protoTrouble', 'netBook', 'net', 'servers']).then((r) => {
+  chrome.storage.local.get(['trouble', 'protoTrouble', 'perf', 'netBook', 'net', 'servers']).then((r) => {
     trouble = r.trouble || [];
     protoTrouble = r.protoTrouble || [];
+    perf = r.perf || {};
     servers = r.servers || {};
     book = r.netBook || null;
     curNet = netKey(r.net);
@@ -347,6 +351,9 @@ function cleanTarget(ev) {
   return null;
 }
 
+// src 记录的字节项见 analyze.js SRC_KEYS；一项超过 SRC_MAX（1 TB）的按页面乱报，不记
+const SRC_MAX = 1e12;
+
 // 各类页面事件。s：所属会话；page：发出事件的 frame 的页面类型（iframe 可能和顶层不同）；t：收到的时间
 const PAGE_EVENTS = {
   target(ev, { tabId, s }) {
@@ -430,6 +437,31 @@ const PAGE_EVENTS = {
     if (s.boot && s.boot.start == null) s.boot.start = t;
     const inc = incidentOf(rec);
     if (inc) addTrouble(rec.hosts, TROUBLE_W[inc], inc);
+  },
+
+  // 扩展看不到的流量（见 hook.js 的 src）：这一段（d 毫秒）的增量，cdn ~ vcache 照抄播放器的 cdnInfo，rx / tx 为 WebRTC 数据通道收、发的字节。
+  // 只记大于 0 的项（没有的、为 0 的都不写），都没有就不记。iframe 里的（部分直播间的播放器在 iframe 里）记到顶层页面的会话
+  src(ev, { s, t }) {
+    const rec = { ty: 'src', t, sid: s.sid };
+    const d = num(ev.d);
+    if (d !== null && d >= 0) rec.d = Math.round(d);
+    let any = false;
+    for (const k of SRC_KEYS) {
+      const v = num(ev[k]);
+      if (v === null || v < 0.5 || v > SRC_MAX) continue;
+      rec[k] = Math.round(v);
+      any = true;
+    }
+    if (any) record(s, rec);
+  },
+
+  // 这个会话按设置关了 B 站的 P2P（测试功能，见 hook.js「关闭 B 站 P2P」）：vod 改了播放器读到的 fawkes 配置，live 改了分配里的 p2p_data。
+  // 复盘时分得清 P2P 是关掉的还是本来就没用。hook.js 在主视频开始播放后才发；每个会话每种只记一条，iframe 里的记到顶层页面的会话
+  p2poff(ev, { s, page, t }) {
+    const kind = ev.kind === 'vod' || ev.kind === 'live' ? ev.kind : null;
+    if (!kind || (s.p2poff || []).includes(kind)) return;
+    s.p2poff = [...(s.p2poff || []), kind];
+    record(s, { ty: 'p2poff', t, sid: s.sid, pg: page, kind });
   },
 };
 
@@ -705,6 +737,28 @@ function learnServer(d) {
   });
 }
 
+// 页面上的表现：页面实际请求各点播 host 的首字节和成败（只记哪些见 route.js perfEntry），每个 host 留近 30 分钟最近 40 个，
+// 存在 storage.local 的 perf，页面经 bridge.js 读取：「自动」不按测速换走页面上表现好的主节点，也不按测速换到页面上比主节点差的（见 route.js pickVod）。
+// 测速取的是冷数据，和播放对不上（见 route.js PERF）。换了网络就清空（见 resetMeasurements）。
+// 每次写都会经 storage.onChanged 发给每个 B 站页面，所以最多 10 秒存一次；改写只在拿到新地址时看，晚 10 秒不要紧
+const savePerf = batched(10e3, () => {
+  const now = Date.now();
+  for (const [h, xs] of Object.entries(perf)) {
+    perf[h] = xs.filter((x) => x[0] > now - PERF.keep).slice(-PERF.max);
+    if (!perf[h].length) delete perf[h];
+  }
+  chrome.storage.local.set({ perf }).catch(() => {});
+});
+
+function notePerf(rec) {
+  const e = perfEntry(rec);
+  if (!e) return;
+  const xs = (perf[rec.h] ||= []);
+  xs.push(e);
+  if (xs.length > PERF.max) xs.shift();
+  savePerf();
+}
+
 /**
  * 直播 HLS 跟不跟得上：每取完一个分片，算近 30 秒分片下载的占用（见 analyze.js hlsLoad），popup 显示；
  * 占用到 90% 以上算一次“跟不上”，记进协议级证据（每 30 秒最多一次），够了「自动」下次就改用 FLV。
@@ -733,6 +787,8 @@ function commit(p, rec) {
     rec.sid = p.sid || (s ? s.sid : null);
     // 记到原会话的（请求期间换了视频），原会话的 ses 在请求发出时已经写了（见 onBeforeRequest）
     record(s && rec.sid === s.sid ? s : null, rec);
+    // 页面上的表现按 host 记，和是哪个会话无关
+    if (rec.ty === 'req') notePerf(rec);
     if (!s || rec.sid !== s.sid) return;
     const seg = rec.ty === 'req' && isFailure(rec) ? segOf(p, rec) : '';
     let entry = null;
@@ -781,6 +837,9 @@ function baseRec(p, d) {
 // 结束时再记一条 reqend（时长、断开原因）。否则要等连接结束才有记录，期间 SW 被回收就会丢失。
 chrome.webRequest.onResponseStarted.addListener((d) => {
   learnServer(d);
+  // 测速请求连到的服务器，记进 probe 记录（统计页「节点分布」按它看只测过、没播放过的节点连到哪里）
+  const x = d.tabId < 0 && probeNet.get(d.url);
+  if (x && d.ip) x.ip = d.ip;
   const p = pending.get(d.requestId);
   if (!p || p.kind !== 'live-flv') return;
   p.open = true;
@@ -906,10 +965,12 @@ function resetMeasurements(clearRecords = false) {
     trouble = [];
     saveTrouble.cancel();
     protoTrouble = [];
+    perf = {};
+    savePerf.cancel();
     probeState = null;
     // 换了网络，镜像解析到的服务器也可能变了，重新记
     servers = {};
-    await chrome.storage.local.remove(clearRecords ? ['net', 'rank', 'trouble', 'protoTrouble', 'servers'] : ['rank', 'trouble', 'protoTrouble', 'servers']);
+    await chrome.storage.local.remove(clearRecords ? ['net', 'rank', 'trouble', 'protoTrouble', 'perf', 'servers'] : ['rank', 'trouble', 'protoTrouble', 'perf', 'servers']);
     await chrome.storage.session.remove(['probeLog', 'probeWait', 'probeState']);
   });
   probeReset = reset.catch(() => {});
@@ -967,7 +1028,7 @@ function probeSession() {
 
 // 测速请求的网络层时间（webRequest 时间戳）。fetch 在 SW 里拿到响应头的时间不准：
 // 实测响应头常常要等正文差不多到齐才交过来，按 JS 计时会把首字节时间算大、吞吐算成几百 Mbps
-const probeNet = new Map(); // url → { ts, th, te }
+const probeNet = new Map(); // url → { ts, th, te, ip }
 function probeTime(d, key) {
   const x = d.tabId < 0 && probeNet.get(d.url);
   if (x && !(key in x)) x[key] = d.timeStamp;
@@ -1005,6 +1066,7 @@ async function timedFetch(url, init, { maxBytes = 0, maxMs = Infinity } = {}) {
     out.tt = Math.round(h - (net.ts ?? t0));
     // 正文常常和响应头几乎同时到齐（边缘节点回源慢、本地传得快），传输时间至少按 4ms 算，吞吐封顶约 1000 Mbps
     if (out.b) out.mbps = Math.round((out.b * 8) / Math.max(Math.min(net.te ?? tend, tend) - h, 4) / 10) / 100;
+    if (net.ip) out.ip = net.ip;
     return out;
   } finally {
     probeNet.delete(url);
@@ -1044,6 +1106,7 @@ async function probeOne(c) {
     const init = c.k === 'vod' ? { ...opts, headers: { Range: c.range } } : opts;
     const r = await timedFetch(url, init, { maxBytes: PROBE.bytes, maxMs: c.k === 'live-flv' ? 3000 : Infinity });
     Object.assign(rec, { st: r.st, tt: r.tt, b: r.b, mbps: r.mbps ?? null });
+    if (r.ip) rec.ip = r.ip;
     if (c.k === 'live-hls' && r.ok) {
       rec.seg = r.len || r.b;
       if (rec.dur) rec.br = Math.round((rec.seg * 8) / rec.dur / 1e4) / 100;
@@ -1161,11 +1224,15 @@ function verifyValid(tabId, task, now = Date.now()) {
   return !!task && verifyWait[tabId] === task && now - task.at < VERIFY_WAIT.max && task.net === curNet && !!s && s.sid === task.sid && !!s.target && s.target.t === task.tt && !targetExpired(s.target, now);
 }
 
-/** 测速候选：点播为分配里的节点加上各 UPOS 镜像，这一轮各节点取同一段（结果才能比较）；直播为 B 站给的各条线路。key 见 route.js lineKey。 */
-function probeCands(tg) {
+/**
+ * 测速候选：点播为分配里的节点加上各 UPOS 镜像和这个网络测得好的其他镜像（见 probe.js bookHosts），这一轮各节点取同一段（结果才能比较）；
+ * 直播为 B 站给的各条线路。extra：另外要测的点播镜像（探查时为 SURVEY_MIRRORS，见 startSurvey）。key 见 route.js lineKey。
+ */
+function probeCands(tg, extra = []) {
   if (tg.kind !== 'vod') return tg.lines.map((c) => ({ ...c, key: lineKey(c.h, c.c, c.qn) }));
   const range = probeRange(tg.size || 0, PROBE.bytes);
-  return vodCandidates(tg.urls).map((c) => ({ ...c, range, key: lineKey(c.h, c.c, c.qn) }));
+  const more = [...bookHosts(book && curNet ? book.nets[curNet] : null), ...extra];
+  return vodCandidates(tg.urls, more).map((c) => ({ ...c, range, key: lineKey(c.h, c.c, c.qn) }));
 }
 
 /**
@@ -1202,10 +1269,33 @@ function addProbe(log, c, rec, s, net) {
   const ok = !rec.e && rec.st >= 200 && rec.st < 300;
   const sc = probeScore(rec);
   const xs = (log[c.key] ||= []);
-  xs.push({ t: rec.t, k: rec.k, h: c.h, c: c.c || '', qn: c.qn ?? null, sc, ok, tt: rec.tt, mbps: rec.mbps, br: rec.br ?? null });
+  // sv：探查测的，不算进「测过几次」（见 probe.js probeRank 的 n）
+  xs.push({ t: rec.t, k: rec.k, h: c.h, c: c.c || '', qn: c.qn ?? null, sc, ok, tt: rec.tt, mbps: rec.mbps, br: rec.br ?? null, ...(rec.sv ? { sv: 1 } : {}) });
   if (xs.length > PROBE.keep) xs.shift();
   // 测的时候换了网络（见 checkNetwork）就不记进档案
   if (book && net && net === curNet) bookAdd(book, net, c.key, rec.k, sc, rec.br, rec.t, curLabel);
+}
+
+/**
+ * 一轮测完（定时测速、复测、探查）：去掉过期的测速记录，算排名、更新退避，存下来；换了网络、清空过（epoch 变了）的不存，返回 null。
+ * probed：这一轮测过的；keep：不暂缓的 host；slow：本网络档案里从没测好过的（见 probe.js bookSlow）。saveNow：网络档案马上存（探查完统计页要读）
+ */
+async function saveRound(epoch, { log, wait, probed, keep, slow }, saveNow = false) {
+  for (const key of Object.keys(log)) {
+    log[key] = log[key].filter((x) => x.t > Date.now() - PROBE.maxAge);
+    if (!log[key].length) delete log[key];
+  }
+  const rank = probeRank(log);
+  updateBackoff(wait, probed, keep, rank, log);
+  // popup 显示哪些节点在暂缓、什么时候再测
+  rank.wait = restUntil(wait, slow, keep);
+  await chrome.storage.session.set({ probeLog: log, probeWait: wait });
+  if (epoch !== probeEpoch) return null;
+  const known = knownNow();
+  await chrome.storage.local.set({ rank, ...(known ? { known } : {}) });
+  if (saveNow) await saveBook();
+  else if (Date.now() - bookSavedAt >= BOOK_SAVE_MS) saveBook();
+  return rank;
 }
 
 // 测速记录按 lineKey 分开（点播按 host；直播按 host + 编码 + 清晰度），排名见 probe.js probeRank。
@@ -1268,20 +1358,8 @@ function runProbe(force = false, verifyTab = null) {
       if (epoch !== probeEpoch) return null;
       addProbe(log, c, rec, cur.s, net);
     }
-    for (const key of Object.keys(log)) {
-      log[key] = log[key].filter((x) => x.t > Date.now() - PROBE.maxAge);
-      if (!log[key].length) delete log[key];
-    }
-    const rank = probeRank(log);
-    updateBackoff(wait, probed, keep, rank, log);
-    // popup 显示哪些节点在暂缓、什么时候再测
-    rank.wait = restUntil(wait, vod ? bookSlow(bookEntry()) : {}, keep);
-    await chrome.storage.session.set({ probeLog: log, probeWait: wait });
-    if (epoch !== probeEpoch) return null;
-    const known = knownNow();
-    await chrome.storage.local.set({ rank, ...(known ? { known } : {}) });
-    if (Date.now() - bookSavedAt >= BOOK_SAVE_MS) saveBook();
-    noteProbe(cur.tabId, probed.length, stopped);
+    const rank = await saveRound(epoch, { log, wait, probed, keep, slow: vod ? bookSlow(bookEntry()) : {} });
+    if (rank) noteProbe(cur.tabId, probed.length, stopped);
     return rank;
   })()
     .catch((e) => console.warn('[bilicdn] 测速失败', e))
@@ -1291,6 +1369,105 @@ function runProbe(force = false, verifyTab = null) {
       if (verify && !later && verifyWait[verifyTab] === task) dropVerify(verifyTab);
     });
   return probing;
+}
+
+// ---------------------------------------------------------------- 探查
+// 统计页「节点分布」里点「探查」：把正在播放的视频 / 直播间的候选节点各测一次，点播另加只在探查时测的镜像（见 probe.js SURVEY_MIRRORS）。
+// 不同地方分到的节点、各节点快慢完全不同（见 docs/node-distribution-2026-10-29.md）：换到一个新网络，定时测速每轮只测 4 个，
+// 测速关着时更是不测，要很久才知道这个网络里哪些节点测得通、连到哪台服务器、哪个快。探查一次测完，点播二十来个节点，约 10 MB。
+// 测速开关关着也测（用户自己点的），照样不和播放抢带宽（见 probe.js probeGate）：缓冲不够就等，每 5 秒看一次，合计等满 2 分钟还不够就停下，测过的照样记。
+// 结果和定时测速一样记进记录（sv=1）、测速排名和网络档案；点播镜像测得好的，以后这个网络的定时测速也测（见 probe.js bookHosts）。
+// 探查的单次结果只用来挑候选，不算进「测过几次」：「自动」要等定时测速、复测再测过几次才会换过去（见 route.js PROBE_MIN）。
+// 同一时间只有一轮测速：探查占着 probing，定时测速、复测等它测完。换了网络、暂停、清空时停下（probeEpoch 变了）。
+// 进度存在 storage.session 的 survey，统计页显示；SW 被回收时探查跟着停下，重启时标成停下了（见 ready）
+const SURVEY = { every: 5e3, wait: 120e3 };
+let survey = null; // 这次探查的进度：{ t, tab, net, kind, total, done, ok, wait: 在等缓冲, end: 停下的原因, te }
+
+function setSurvey(patch) {
+  survey = { ...survey, ...patch };
+  chrome.storage.session.set({ survey }).catch(() => {});
+}
+
+/**
+ * 开始探查（统计页点的），不等测完：返回 { ok: true, state: 进度 }，正在探查的返回它的进度；
+ * 没法探查返回 { ok: false, reason }：off 暂停着，idle 没有正在播放、地址可用的页面。force：不看缓冲（端到端测试用）
+ */
+async function startSurvey(force = false) {
+  await Promise.all([ready, settingsReady, probeReset, bookReady]);
+  if (!settings.enabled) return { ok: false, reason: 'off' };
+  if (survey && !survey.end) return { ok: true, state: survey };
+  const cur = probeSession();
+  if (!cur) return { ok: false, reason: 'idle' };
+  const tg = cur.s.target;
+  const cands = probeCands(tg, tg.kind === 'vod' ? SURVEY_MIRRORS : []);
+  survey = null;
+  setSurvey({ t: Date.now(), tab: cur.tabId, net: curNet, kind: tg.kind, total: cands.length, done: 0, ok: 0 });
+  runSurvey(cur, cands, force).catch((e) => console.warn('[bilicdn] 探查失败', e));
+  return { ok: true, state: survey };
+}
+
+/**
+ * 依次测 cands，每个测之前看缓冲（force 时不看）。停下的原因记在 survey.end：done 测完，stop 暂停 / 换了网络 / 清空，
+ * gone 关了标签页或者地址快过期，stall / buffer 缓冲等满 2 分钟还不够。
+ */
+async function runSurvey(cur, cands, force) {
+  // 正在测的一轮（定时测速、复测）先测完
+  while (probing) await probing;
+  let release;
+  const mine = (probing = new Promise((r) => (release = r)));
+  const epoch = probeEpoch;
+  const net = curNet;
+  const tg = cur.s.target;
+  let end = 'done';
+  let rank = null;
+  let waited = 0;
+  // 能测下一个了返回 null，否则返回停下的原因
+  const gate = async () => {
+    for (;;) {
+      if (epoch !== probeEpoch || !settings.enabled) return 'stop';
+      if (!tabs[cur.tabId] || targetExpired(tg)) return 'gone';
+      const skip = force ? null : probeGate(await askPlayer(cur.tabId));
+      if (!skip) return null;
+      if (waited >= SURVEY.wait) return skip;
+      if (!survey.wait) setSurvey({ wait: skip });
+      await new Promise((r) => setTimeout(r, SURVEY.every));
+      waited += SURVEY.every;
+    }
+  };
+  try {
+    netRecheck();
+    const { probeLog: log = {}, probeWait: wait = {} } = await chrome.storage.session.get(['probeLog', 'probeWait']);
+    const probed = [];
+    for (const c of cands) {
+      const stop = await gate();
+      if (stop) {
+        end = stop;
+        break;
+      }
+      if (survey.wait) setSurvey({ wait: null });
+      const rec = await probeOne(c);
+      rec.sv = 1;
+      // 记下之前确认网络归属，同 runProbe
+      if (netDeciding) await netDeciding;
+      if (epoch !== probeEpoch) {
+        end = 'stop';
+        break;
+      }
+      addProbe(log, c, rec, cur.s, net);
+      probed.push(c);
+      setSurvey({ done: survey.done + 1, ok: survey.ok + (probeScore(rec) > 0 ? 1 : 0) });
+    }
+    if (probed.length && epoch === probeEpoch) {
+      const vod = tg.kind === 'vod';
+      const keep = new Set(vod ? [hostOf(tg.urls[0])] : cands.map((c) => c.h));
+      rank = await saveRound(epoch, { log, wait, probed, keep, slow: vod ? bookSlow(book && net ? book.nets[net] : null) : {} }, true);
+    }
+  } finally {
+    setSurvey({ end, wait: null, te: Date.now() });
+    if (probing === mine) probing = null;
+    release(rank);
+  }
+  return rank;
 }
 
 // ---------------------------------------------------------------- 手动问题标注
@@ -1514,6 +1691,10 @@ async function handle(msg, sender) {
       const rank = await runProbe();
       return rank ? { ok: true, rank } : { ok: false, reason: 'idle' };
     }
+    case 'survey':
+      // 统计页「节点分布」点了探查（见 startSurvey），不等测完；进度看 storage.session 的 survey
+      if (fromPage) return null;
+      return startSurvey();
     case 'mark': {
       if (!settings.enabled) return { ok: false, reason: 'off' };
       const lv = [1, 2, 3].includes(msg.lv) ? msg.lv : 2;

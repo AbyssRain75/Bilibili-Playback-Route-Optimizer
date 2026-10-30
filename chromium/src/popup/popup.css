@@ -139,6 +139,16 @@ main { display: grid; gap: 10px; }
 .opt-row label { font-size: 11px; }
 .opt-row select { width: 100%; background: var(--surface); }
 select:disabled { opacity: .5; cursor: not-allowed; }
+.p2p { margin-top: 10px; display: grid; gap: 6px; }
+.p2p-note { margin: 0; font-size: 11px; line-height: 1.45; }
+.theme { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; }
+.theme h2 { margin: 0; }
+.segmented { display: flex; padding: 2px; border-radius: 9px; background: var(--surface-2); }
+.segmented label { position: relative; padding: 4px 10px; border-radius: 7px; color: var(--muted); font-size: 12px; white-space: nowrap; cursor: pointer; }
+/* 单选框盖在整个选项上（看不见），点哪都能选，键盘的方向键照常切换 */
+.segmented input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.segmented label:has(input:checked) { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 12%); }
+.segmented label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mark-head .muted { padding: 2px 6px; border: 1px solid var(--border); border-radius: 5px; font-size: 10px; }
 #shortcut:empty { display: none; }
 .mark-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

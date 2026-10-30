@@ -117,6 +117,70 @@
   /** 手动标记是否归咎于当时在用的节点：音画不同步、掉帧、或者缓冲充足的不算。 */
   const blamesNode = (m) => m.issue !== 'sync' && m.cause !== 'drop' && m.cause !== 'ok';
 
+  // ---------------------------------------------------------------- 扩展看不到的流量
+  // src 记录（见 hook.js、sw.js）：播放器按来源记的字节（点播的 cdnInfo：cdn HTTP、nc B 站的 P2P、pdn 激励 PCDN 加载器、p2p 老的第三方 P2P 等）
+  // 和 WebRTC 数据通道收、发的字节（rx / tx），按会话、按段记增量。大陆网络下大部分媒体数据走 P2P，webRequest 看不到（见 docs/mainland-p2p-2026-10-29.md）。
+  // 「看到的比例」= 扩展记到的 req 字节 ÷ 会话的媒体数据：有 cdnInfo 的（点播）按 cdn + nc + pdn + p2p 算（rx 和 nc 是同一份数据，不再加），
+  // 没有的（直播）按 req 字节 + rx 算。cdnInfo 每 30 秒才读一次，还在播放的会话最后一段没读，一个会话看到的超过它的媒体数据时按全看到算。
+  // 没有 src 的会话（旧记录，读不到 cdnInfo 又没有 WebRTC 的）不知道：不算进比例，也不当成 0。看到的不到 most 时统计页提示只管得到这部分
+  const SRC_KEYS = ['cdn', 'nc', 'ncBr', 'pdn', 'p2p', 'mcdn', 'bcache', 'business', 'vcache', 'rx', 'tx'];
+  const SRC = { most: 0.5 };
+  const CDN_TOTAL = ['cdn', 'nc', 'pdn', 'p2p'];
+
+  /**
+   * 按会话累加媒体请求的字节和 src 各项。acc：Map，sid → { req, n 有几条 src, 各项字节, media 有媒体请求或 src, off 按设置关了 B 站的 P2P }，见 srcSummary。
+   * p2poff（1.2.5 起，测试功能）只用来说明 P2P 为什么是 0，不算进媒体数据
+   */
+  function srcAdd(acc, r) {
+    if (!r.sid || (r.ty !== 'req' && r.ty !== 'src' && r.ty !== 'p2poff')) return;
+    let s = acc.get(r.sid);
+    if (!s) acc.set(r.sid, (s = { req: 0, n: 0 }));
+    if (r.ty === 'p2poff') {
+      s.off = 1;
+      return;
+    }
+    s.media = 1;
+    if (r.ty === 'req') {
+      if (r.b > 0) s.req += r.b;
+      return;
+    }
+    s.n += 1;
+    for (const k of SRC_KEYS) if (r[k] > 0) s[k] = (s[k] || 0) + r[k];
+  }
+
+  /**
+   * 扩展看到了多少媒体流量（acc 见 srcAdd）。返回 { sessions 有媒体请求或 src 的会话, known 其中有 src 的, total 这些会话的媒体数据,
+   * seen 其中扩展记到的, p2p 来自 P2P 的, pdn 来自激励 PCDN 加载器的, other 扩展看不到的 HTTP（如不在网站权限里的 PCDN）, tx 上传（字节）,
+   * off 有 src 的会话里按设置关了 B 站 P2P 的（测试功能）, share / p2pShare / pdnShare / otherShare 占媒体数据的比例 }。
+   * 没有 src 的会话不算进 total；total 为 0 时各比例为 null（不知道）。
+   * 扩展看不到的 HTTP = 媒体数据 − 看到的 − P2P。PCDN 加载器取的也是 HTTP，不再从里面减：它从 xy*.mcdn.bilivideo.cn 取，在网站权限里，
+   * 实测扩展记到的请求和 pdn 一字不差（开发计划第 21 项），再减一次就重复了；pdn 只单独列出来（取的可能看得到，也可能看不到）
+   */
+  function srcSummary(acc) {
+    const out = { sessions: 0, known: 0, total: 0, seen: 0, p2p: 0, pdn: 0, other: 0, tx: 0, off: 0 };
+    for (const s of acc.values()) {
+      if (!s.media) continue;
+      out.sessions += 1;
+      if (!s.n) continue;
+      out.known += 1;
+      if (s.off) out.off += 1;
+      const g = (k) => s[k] || 0;
+      const cdnInfo = CDN_TOTAL.some((k) => g(k) > 0);
+      const total = cdnInfo ? CDN_TOTAL.reduce((a, k) => a + g(k), 0) : s.req + g('rx');
+      const seen = Math.min(s.req, total);
+      const p2p = cdnInfo ? g('nc') + g('p2p') : g('rx');
+      const pdn = cdnInfo ? g('pdn') : 0;
+      out.total += total;
+      out.seen += seen;
+      out.p2p += p2p;
+      out.pdn += pdn;
+      out.other += Math.max(0, total - seen - p2p);
+      out.tx += g('tx');
+    }
+    const of = (v) => (out.total > 0 ? v / out.total : null);
+    return { ...out, share: of(out.seen), p2pShare: of(out.p2p), pdnShare: of(out.pdn), otherShare: of(out.other) };
+  }
+
   /** 按本地日历筛选报告记录；之前的会话和分配只用作上下文，不计入本期记录。 */
   function selectPeriod(records, period = 'all', now = Date.now()) {
     if (period !== 'day' && period !== 'week') return { period: 'all', from: null, to: now, records, context: [] };
@@ -144,6 +208,7 @@
     const marks = [];
     const unmarked = new Set();
     const auto = { stall: 0, slow: 0, fail: 0 };
+    const src = new Map(); // 按会话的媒体数据来源（见 srcAdd）
     let since = Infinity;
     let last = 0;
 
@@ -172,6 +237,7 @@
       counts[r.ty] = (counts[r.ty] || 0) + 1;
       if (r.t < since) since = r.t;
       if (r.t > last) last = r.t;
+      srcAdd(src, r);
 
       if (r.ty === 'ses') {
         const s = sessionOf(r.sid, r.pg);
@@ -307,6 +373,7 @@
       hosts: hostRows,
       pages: pageRows,
       auto,
+      src: srcSummary(src),
       marks: markRows.map((m) => ({ t: m.t, sid: m.sid, pg: m.pg, path: m.path, lv: m.lv, issue: m.issue || null, via: m.via, note: m.note || '', hosts: m.hosts || [], ps: m.ps || null, cause: m.cause || null })),
       coverage: {
         played: played.length,
@@ -426,7 +493,7 @@
     return { total: out.length, rows };
   }
 
-  const api = { AUTO, MARK, TL, MAIN_SHARE, HLS_LOAD, blameHosts, blameHung, mainHosts, incidentOf, hlsLoad, markCause, blamesNode, selectPeriod, analyze, timelines };
+  const api = { AUTO, MARK, TL, MAIN_SHARE, HLS_LOAD, SRC, SRC_KEYS, blameHosts, blameHung, mainHosts, incidentOf, hlsLoad, markCause, blamesNode, srcAdd, srcSummary, selectPeriod, analyze, timelines };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.__bilicdn = Object.assign(root.__bilicdn || {}, api);
 })(globalThis);

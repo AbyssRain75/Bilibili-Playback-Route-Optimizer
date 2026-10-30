@@ -30,8 +30,9 @@
 
   // 设置（settings）、测速排名（rank）和卡顿证据（trouble 按节点、protoTrouble 按直播协议）存在 chrome.storage.local，
   // MAIN world 读不到，变化时重新传一次。排名是否过期、哪些节点算出过问题由 route.js 在改写时按当时的时间判断
-  // known：本网络以往的测速（网络档案，见 probe.js），没有新测速时用；hls 为直播 HLS 按编码和清晰度汇总的，开播选协议用
-  const KEYS = ['settings', 'rank', 'known', 'trouble', 'protoTrouble'];
+  // known：本网络以往的测速（网络档案，见 probe.js），没有新测速时用；hls 为直播 HLS 按编码和清晰度汇总的，开播选协议用；
+  // rank.n、known.n：点播各节点测了几次（「自动」要测过几次才换过去）。perf：页面实际请求各点播 host 的首字节和成败，原样传，近期的由 route.js 汇总
+  const KEYS = ['settings', 'rank', 'known', 'trouble', 'protoTrouble', 'perf'];
   const store = {};
   function push() {
     const s = store.settings || {};
@@ -41,10 +42,13 @@
     const trouble = (store.trouble || []).map((x) => ({ t: x.t, h: x.h, p: x.p, w: x.w }));
     const proto = (store.protoTrouble || []).map((x) => ({ t: x.t, p: x.p, qn: x.qn, w: x.w }));
     const k = store.known || {};
-    const known = { vod: k.vod || {}, live: k.live || {}, br: k.br || {}, hls: k.hls || {} };
-    const config = { on: !paused && !!s.route, vod: s.vodHost || 'auto', live: s.liveProto || 'auto', probe: !paused && !!s.probe, rank: { t: rank.t || 0, vod: rank.vod || {}, live: rank.live || {}, br: rank.br || {} }, known, trouble, proto };
+    const known = { vod: k.vod || {}, live: k.live || {}, br: k.br || {}, hls: k.hls || {}, n: k.n || {} };
+    // p2p：关闭 B 站 P2P（测试功能，见 hook.js「关闭 B 站 P2P」），暂停时按不改
+    const p2p = !paused && (s.p2p || 'site') === 'off' ? 'off' : 'site';
+    const config = { on: !paused && !!s.route, vod: s.vodHost || 'auto', live: s.liveProto || 'auto', probe: !paused && !!s.probe, p2p, rank: { t: rank.t || 0, vod: rank.vod || {}, live: rank.live || {}, br: rank.br || {}, n: rank.n || {} }, known, trouble, proto, perf: store.perf || {} };
     document.dispatchEvent(new CustomEvent('bilicdn:config', { detail: JSON.stringify(config) }));
     hint(config.on);
+    p2pHint(p2p === 'off');
   }
 
   // 线路优化开没开的提示，记在页面的 localStorage 里，下次打开这个网站的页面时 hook.js 能同步读到（设置要等读完存储才到）：
@@ -55,6 +59,17 @@
     try {
       const v = on ? '1' : '0';
       if (localStorage.getItem(HINT) !== v) localStorage.setItem(HINT, v);
+    } catch {}
+  }
+
+  // 关闭 B 站 P2P 的提示，同上：点播播放器读 fawkes 配置时设置可能还没到，hook.js 这时按它判断（见 hook.js「关闭 B 站 P2P」）。
+  // 只在关闭时记，不关时删掉，默认设置的页面上不多出这一项
+  const P2P_HINT = 'bilicdn:p2p';
+  function p2pHint(off) {
+    try {
+      if (off) {
+        if (localStorage.getItem(P2P_HINT) !== '1') localStorage.setItem(P2P_HINT, '1');
+      } else if (localStorage.getItem(P2P_HINT) !== null) localStorage.removeItem(P2P_HINT);
     } catch {}
   }
   try {

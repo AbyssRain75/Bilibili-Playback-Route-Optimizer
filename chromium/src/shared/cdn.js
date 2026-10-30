@@ -136,7 +136,8 @@
     if (h.startsWith('upos-')) return 'upos';
     if (/(^|[.-])ov-gotcha/.test(h)) return 'live-ov';
     if (h.includes('gotcha')) return 'live-3rd';
-    if (/^cn-[a-z0-9]+-[a-z]+-/.test(h)) return 'edge';
+    // 自建边缘：cn-省市-运营商-…，如 cn-gddg-ct-01-10。2026-10-29 在中国大陆的测试服务器上，直播还分到了同样命名的 ec-hncs-ct-01-05
+    if (/^(cn|ec)-[a-z0-9]+-[a-z]+-/.test(h)) return 'edge';
     return 'other';
   }
 
@@ -176,12 +177,24 @@
     return m ? Number(m[1]) : null;
   }
 
+  // B 站页面地址的语言前缀：2026-10-29 实测，海外访问时 www.bilibili.com/video/BV… 打开后由页面脚本整页跳到
+  // /zh-Hans/video/BV…，首页、搜索、空间、动态、番剧也一样，直播不跳。不去掉的话视频页认成「其他」
+  // （hook.js 也就不保护首屏数据），带不带前缀的同一个视频也成了两个页面。哪些算前缀照 B 站页面脚本的写法：
+  // 路径第一段不分大小写是它支持的这几种语言之一，B 站自己判断页面时也先去掉
+  const SITE_LANGS = new Set(['en', 'th', 'vi', 'id', 'ja', 'zh-hant', 'zh-hans', 'ar', 'pt', 'es', 'tr', 'ru', 'ms']);
+
+  /** 去掉地址路径开头的语言前缀（见 SITE_LANGS），只剩前缀的为 '/'；末尾斜杠照原样 */
+  function sitePath(pathname) {
+    const m = /^\/([^/]+)(\/.*)?$/.exec(pathname);
+    return m && SITE_LANGS.has(m[1].toLowerCase()) ? m[2] || '/' : pathname;
+  }
+
   function pageType(href) {
     const u = parseUrl(href);
     if (!u) return 'other';
     if (u.hostname === 'live.bilibili.com') return 'live';
     if (u.hostname === 'player.bilibili.com') return 'embed';
-    const p = u.pathname;
+    const p = sitePath(u.pathname);
     if (p.startsWith('/video/')) return 'video';
     if (p.startsWith('/bangumi/')) return 'pgc';
     if (p.startsWith('/cheese/')) return 'cheese';
@@ -192,7 +205,7 @@
   }
 
   /**
-   * 页面标识：host + 路径（去掉末尾斜杠）+ 决定播放内容的参数（bvid、分 P）。
+   * 页面标识：host + 路径（去掉语言前缀和末尾斜杠）+ 决定播放内容的参数（bvid、分 P）。
    * 站内切换视频只改地址栏、不重新加载页面，靠它判断是否换了页面；spm_id_from 等来源参数的变化不算。
    */
   function pageKey(href) {
@@ -203,7 +216,7 @@
     const p = u.searchParams.get('p');
     if (bvid) q.push(`bvid=${bvid}`);
     if (p && p !== '1') q.push(`p=${p}`);
-    return u.host + (u.pathname.replace(/\/+$/, '') || '/') + (q.length ? `?${q.join('&')}` : '');
+    return u.host + (sitePath(u.pathname).replace(/\/+$/, '') || '/') + (q.length ? `?${q.join('&')}` : '');
   }
 
   /**
@@ -307,11 +320,13 @@
    */
   const netKey = (n) => (n && n.country && n.isp ? [n.country, n.province || '', n.isp].join('|') : '');
 
-  // 扩展设置的默认值，存储里缺的项按它补（SW 和 popup 共用；bridge.js、player.js 不依赖共享脚本，按同样的默认值判断）。
+  // 扩展设置的默认值，存储里缺的项按它补（SW 和 popup 共用；bridge.js、player.js、theme.js 不依赖共享脚本，按同样的默认值判断）。
   // enabled：总开关，关掉就暂停整个扩展（见 sw.js pause）；route：线路优化（改写播放地址）；
   // vodHost / liveProto：点播节点 / 直播线路，auto 为按测速自动选；probe：每 30 秒测速；markButton：播放器控制栏上的标记按钮（见 player.js）；
-  // lang：界面语言，auto 跟浏览器，zh / en 固定（见上文 setLang）
-  const DEFAULT_SETTINGS = Object.freeze({ enabled: true, route: false, vodHost: 'auto', liveProto: 'auto', probe: false, markButton: true, lang: 'auto' });
+  // lang：界面语言，auto 跟浏览器，zh / en 固定（见上文 setLang）；
+  // theme：B 站网页的主题，site 不改（按 B 站自己的设置），light / dark 浅色 / 深色，system 跟随系统（见 content/theme.js）；
+  // p2p：B 站网页播放器自己的 P2P，site 不改，off 关闭（测试功能，见 main/hook.js「关闭 B 站 P2P」和 route.js fawkesNoP2P / liveNoP2P）
+  const DEFAULT_SETTINGS = Object.freeze({ enabled: true, route: false, vodHost: 'auto', liveProto: 'auto', probe: false, markButton: true, lang: 'auto', theme: 'site', p2p: 'site' });
 
   const PAGE_LABELS = {
     get video() { return L('视频', 'Video'); },
@@ -325,7 +340,7 @@
     get other() { return L('其他', 'Other'); },
   };
 
-  const api = { UI_LANG, AUTO_ZH, L, isZh, setLang, pageLang, CLASS_LABELS, PAGE_LABELS, CDN_DOMAINS, DEFAULT_SETTINGS, hostOf, osOf, isBiliUrl, isPcdnHost, isPcdnUrl, isPcdnReq, nodeClass, classifyHost, isCdnHost, mediaKind, lineOf, trackOf, pageType, pageKey, videoIds, quantile, cacheHit, mbpsOf, isTimeout, isHang, isFailure, mergeNet, netChanged, netMoved, netKey };
+  const api = { UI_LANG, AUTO_ZH, L, isZh, setLang, pageLang, CLASS_LABELS, PAGE_LABELS, CDN_DOMAINS, DEFAULT_SETTINGS, hostOf, osOf, isBiliUrl, isPcdnHost, isPcdnUrl, isPcdnReq, nodeClass, classifyHost, isCdnHost, mediaKind, lineOf, trackOf, sitePath, pageType, pageKey, videoIds, quantile, cacheHit, mbpsOf, isTimeout, isHang, isFailure, mergeNet, netChanged, netMoved, netKey };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.__bilicdn = Object.assign(root.__bilicdn || {}, api);
 })(globalThis);

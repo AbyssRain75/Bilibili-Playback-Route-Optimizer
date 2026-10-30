@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const { selectPeriod, analyze, timelines, classifyHost, MAIN_SHARE, netKey, bookKnown, buildExport } = globalThis.__bilicdn;
+  const { selectPeriod, analyze, timelines, classifyHost, MAIN_SHARE, netKey, bookKnown, buildExport, nodeMap, CLASS_LABELS, SRC } = globalThis.__bilicdn;
   const { L, esc, num, bytes, ms, time, chip, dot, pcdnPart, shortHost, shortPath, page, level, problem, net, clock, cause, seekUrl, why, BACKUP_ONLY } = Fmt;
   const $ = (id) => document.getElementById(id);
   const PERIODS = { day: L('本日', 'Today'), week: L('本周', 'This week'), all: L('安装以来', 'Since install') };
@@ -35,7 +35,7 @@
     $('tiles').innerHTML = [
       tile(L('记录时长', 'Time recorded'), `${num(hours, 1)} h`, a.range ? L(`${esc(time(a.range.since))} 起`, `since ${esc(time(a.range.since))}`) : L('暂无数据', 'No data')),
       tile(L('播放会话', 'Playback sessions'), num(played), L(`记下的会话 ${num(c.ses || 0)}`, `recorded sessions ${num(c.ses || 0)}`)),
-      tile(L('媒体请求', 'Media requests'), num(c.req || 0), `${pcdnShare(a.hosts)}${L('总存储', 'storage')} ${bytes(bytesInUse)}`),
+      tile(L('媒体请求', 'Media requests'), num(c.req || 0), `${pcdnShare(a.hosts)}${L('总存储', 'storage')} ${bytes(bytesInUse)}<br>${srcLine(a.src)}`),
       tile(L('分配捕获率', 'Assignment capture'), played ? pct(withAsg / played) : '–', coverageNote.map(esc).join('<br>')),
       tile(
         L('自动识别卡顿', 'Auto-detected stalls'),
@@ -57,6 +57,27 @@
     const total = hosts.reduce((s, r) => s + r.n, 0);
     const pcdn = hosts.reduce((s, r) => s + r.pcdn, 0);
     return total ? L(`PCDN 占 ${pct(pcdn / total)} · `, `PCDN ${pct(pcdn / total)} · `) : '';
+  }
+
+  // 「扩展看到的比例」的口径（见 analyze.js srcSummary），统计页各处的提示共用
+  const SRC_BASIS = L(
+    '扩展记到的媒体请求字节 ÷ 媒体数据：点播按播放器自己按来源记的字节（HTTP、B 站的 P2P、PCDN 加载器），直播按请求字节加 P2P（WebRTC）收到的字节。PCDN 加载器取的也是 HTTP，扩展看得到的已经算在「扩展看到」里，单独列出只说明它取了多少。没有来源记录的会话（旧版本记下的，或者读不到播放器的统计、也没用 P2P 的）不知道，不算进去',
+    "Media request bytes the extension recorded ÷ media data: for videos, the bytes the player itself counts by source (HTTP, Bilibili's P2P, the PCDN loader); for live streams, request bytes plus bytes received over P2P (WebRTC). The PCDN loader also fetches over HTTP; whatever of it the extension sees is already counted as seen, and it is listed only to show how much it fetched. Sessions without source data (recorded by older versions, or where the player's counts couldn't be read and P2P wasn't used) are unknown and left out",
+  );
+  // 上传量：没有上传时写 0（bytes 把 0 显示成「–」，那是没有数据的意思）
+  const upload = (b) => (b > 0 ? bytes(b) : '0 B');
+  // 只说到「几成」：中文「约 N 成」，英文按 10% 取整
+  const tenths = (v) => (v < 0.05 ? L('不到 1 成', 'less than 10%') : L(`约 ${Math.round(v * 10)} 成`, `about ${Math.round(v * 10) * 10}%`));
+  // 有几个会话按设置关了 B 站的 P2P（测试功能，见 analyze.js srcSummary 的 off）：这些会话的 P2P 是关掉的，不是这个网络本来就不用
+  const offNote = (n) => L(`其中 ${num(n)} 个会话按设置关了 B 站的 P2P（测试功能）。`, ` Bilibili's P2P was turned off in the settings (experimental) for ${num(n)} of these sessions.`);
+
+  /** 「媒体请求」下的一行：扩展看到了多少媒体流量、P2P 占多少、上传了多少，PCDN 加载器取过的才写它；没有来源记录的说不知道。 */
+  function srcLine(src) {
+    const basis = src.known < src.sessions ? L(`\n按 ${num(src.known)} / ${num(src.sessions)} 个会话算，其余不知道`, `\nBased on ${num(src.known)} of ${num(src.sessions)} sessions; the rest are unknown`) : '';
+    if (src.share === null) return `<span title="${esc(SRC_BASIS)}">${L('扩展看到的比例：不知道', 'Share seen by the extension: unknown')}</span>`;
+    const pdn = src.pdn > 0 ? L(` · PCDN 加载器 ${pct(src.pdnShare)}`, ` · PCDN loader ${pct(src.pdnShare)}`) : '';
+    const off = src.off > 0 ? `\n${offNote(src.off).trim()}` : '';
+    return `<span title="${esc(SRC_BASIS + basis + off)}">${L(`扩展看到 ${pct(src.share)} · P2P ${pct(src.p2pShare)}${pdn} · 上传 ${upload(src.tx)}`, `seen ${pct(src.share)} · P2P ${pct(src.p2pShare)}${pdn} · uploaded ${upload(src.tx)}`)}</span>`;
   }
 
   const VIA = { key: L('快捷键', 'shortcut'), page: L('播放器按钮', 'player button') };
@@ -369,6 +390,265 @@
       : `<div class="empty">${L('暂无数据', 'No data')}</div>`;
   }
 
+  // ---------------------------------------------------------------- 节点分布
+  // 按网络汇总（见 shared/nodemap.js），默认选当前网络；「探查」只能在当前网络上点（测的是正在播放的页面，见 sw.js startSurvey）
+
+  let mapData = null;
+  let mapKey = null;
+
+  const mapNetLabel = (n) => (n.net ? net(n.net) : L('没识别出的网络', 'Unidentified network'));
+  const host = (h) => `<span class="mono" title="${esc(h)}">${esc(shortHost(h))}</span>`;
+  // 一串节点：最多列 5 个，其余写「等 N 个」
+  function hostList(hs) {
+    const shown = hs.slice(0, 5).map(host).join(L('、', ', '));
+    return hs.length > 5 ? L(`${shown} 等 ${hs.length} 个`, `${shown} and ${hs.length - 5} more`) : shown;
+  }
+  const mbps = (v) => `${num(v, 1)} Mbps`;
+  // 「自动」要测过几次才换过去，探查的单次结果不算（见 route.js PROBE_MIN）
+  const FEW = L('（测速次数还少，结论是初步的：探查每个节点只测一次，要等定时测速再测几次）', ' (few speed tests so far; treat this as preliminary: a survey tests each node only once, so wait for a few more scheduled speed tests)');
+
+  /** 一条结论的文案（code 和参数见 nodemap.js summarize）。 */
+  function finding(f, n) {
+    const few = f.few ? FEW : '';
+    switch (f.code) {
+      case 'assign':
+        return L(
+          `B 站在这个网络主要把「${esc(CLASS_LABELS[f.cls] || f.cls)}」节点当主地址（${pct(f.share)}）${f.host ? `，点播最常分配 ${host(f.host)}（${pct(f.hostShare)} 的分配）` : ''}。`,
+          `On this network Bilibili mostly assigns ${esc(CLASS_LABELS[f.cls] || f.cls)} nodes as the main URL (${pct(f.share)})${f.host ? `; for videos it most often assigns ${host(f.host)} (${pct(f.hostShare)} of assignments)` : ''}.`,
+        );
+      case 'faster':
+        return f.mainSc > 0
+          ? L(
+              `测速最快的是 ${host(f.host)}（${mbps(f.sc)}），是 B 站常分配的 ${host(f.main)}（${mbps(f.mainSc)}）的 ${num(f.sc / f.mainSc, 1)} 倍：打开线路优化、点播节点选「自动」，测过几次之后会换过去。${few}`,
+              `The fastest in speed tests is ${host(f.host)} (${mbps(f.sc)}), ${num(f.sc / f.mainSc, 1)}× the usually assigned ${host(f.main)} (${mbps(f.mainSc)}). With route optimization on and the video node set to "Auto", it switches there after a few tests.${few}`,
+            )
+          : L(
+              `B 站常分配的 ${host(f.main)} 测速没测通，测得最快的是 ${host(f.host)}（${mbps(f.sc)}）：打开线路优化、点播节点选「自动」，测过几次之后会换过去。${few}`,
+              `The usually assigned ${host(f.main)} failed its speed tests; the fastest is ${host(f.host)} (${mbps(f.sc)}). With route optimization on and the video node set to "Auto", it switches there after a few tests.${few}`,
+            );
+      case 'mainPage':
+        return L(
+          `B 站常分配的 ${host(f.host)} 在页面上首字节 ${num(f.tt)} ms（${num(f.n)} 个请求），离得近、表现好：「自动」不会按测速把它换走。${f.best ? `测速里 ${host(f.best)}（${mbps(f.bestSc)}）比它高，多半是因为测速取的是没缓存的数据，和播放对不上。` : ''}`,
+          `The usually assigned ${host(f.host)} answers page requests in ${num(f.tt)} ms (${num(f.n)} requests): it is close and performing well, so "Auto" won't switch away from it based on speed tests.${f.best ? ` ${host(f.best)} (${mbps(f.bestSc)}) scores higher in speed tests, most likely because speed tests fetch uncached data, which doesn't reflect playback.` : ''}`,
+        );
+      case 'mainBest':
+        return L(
+          `B 站常分配的 ${host(f.host)}（${mbps(f.sc)}）就是测速最快的，或者和最快的差不到 20%：这个网络里换节点的余地不大。${few}`,
+          `The usually assigned ${host(f.host)} (${mbps(f.sc)}) is the fastest in speed tests, or within 20% of it: there is little to gain from switching nodes on this network.${few}`,
+        );
+      case 'unprobed':
+        return L(
+          `还没测过 B 站常分配的 ${host(f.host)}，没法比较；目前测得最快的是 ${host(f.best)}（${mbps(f.sc)}）。`,
+          `The usually assigned ${host(f.host)} hasn't been speed tested yet, so there is nothing to compare; the fastest so far is ${host(f.best)} (${mbps(f.sc)}).`,
+        );
+      case 'pcdn':
+        return L(
+          `PCDN 承担了 ${pct(f.share)} 的请求。${f.lv === 'warn' ? '打开线路优化后 PCDN 排到官方节点后面，点播「自动」会换掉 PCDN 主节点。' : ''}`,
+          `PCDN served ${pct(f.share)} of requests.${f.lv === 'warn' ? ' With route optimization on, PCDN is ranked after official nodes and "Auto" replaces a PCDN main node for videos.' : ''}`,
+        );
+      case 'src': {
+        // 扩展看到、P2P、扩展看不到的 HTTP 加起来是全部媒体数据；PCDN 加载器取的也是 HTTP，不是另一块，取过的才另写一句（见 analyze.js srcSummary）
+        const parts = [`P2P ${pct(f.p2p)}`];
+        if (f.other >= 0.05) parts.push(L(`扩展看不到的 HTTP（如不在网站权限里的 PCDN）${pct(f.other)}`, `HTTP the extension can't see (such as PCDN outside its site access) ${pct(f.other)}`));
+        parts.push(`${L('上传', 'uploaded')} ${upload(f.tx)}`);
+        const list = parts.join(L('、', ', '));
+        const pdn = f.pdn > 0 ? L(`PCDN 加载器取了 ${pct(f.pdn)}，取的也是 HTTP，扩展看得到的已经算在看到的里面。`, ` The PCDN loader fetched ${pct(f.pdn)}; that is HTTP too, and the part the extension can see is already counted as seen.`) : '';
+        const basis = f.known < f.sessions ? L(`按 ${num(f.known)} / ${num(f.sessions)} 个会话算，其余没有来源记录，不知道。`, ` Based on ${num(f.known)} of ${num(f.sessions)} sessions; the rest have no source data.`) : '';
+        const off = f.off > 0 ? offNote(f.off) : '';
+        return f.lv === 'warn'
+          ? L(
+              `这个网络扩展只看到${tenths(f.share)}媒体流量（${pct(f.share)}；${list}）：统计、卡顿归因和线路优化都只管得到这部分。${pdn}${basis}${off}`,
+              `On this network the extension sees only ${tenths(f.share)} of the media traffic (${pct(f.share)}; ${list}): its statistics, stall attribution and route optimization only cover that part.${pdn}${basis}${off}`,
+            )
+          : L(`扩展看到了 ${pct(f.share)} 的媒体流量（${list}）。${pdn}${basis}${off}`, `The extension sees ${pct(f.share)} of the media traffic (${list}).${pdn}${basis}${off}`);
+      }
+      case 'stall':
+        return L(`${host(f.host)} 卡顿最多：${num(f.n)} 次自动识别的卡顿里它是主要责任节点。`, `${host(f.host)} stalls the most: it was the main responsible node in ${num(f.n)} auto-detected stalls.`);
+      case 'hlsSlow':
+        return L(
+          `以往测速里直播 HLS 跟不上（得分只有码率的 ${num(f.r, 2)} 倍）：线路优化「自动」在这个网络开播就用 FLV。`,
+          `Past speed tests show live HLS can't keep up (score only ${num(f.r, 2)}× the bitrate): with route optimization on, "Auto" starts live streams on FLV on this network.`,
+        );
+      case 'hlsOk':
+        return L(`以往测速里直播 HLS 跟得上（得分是码率的 ${num(f.r, 2)} 倍以上）。`, `Past speed tests show live HLS keeps up (score at least ${num(f.r, 2)}× the bitrate).`);
+      case 'extra':
+        return L(
+          `B 站在这个网络分配过内置镜像列表以外的 ${hostList(f.hosts)}：测得好就会和内置镜像一起测速、参与「自动」选择。`,
+          `On this network Bilibili assigned ${hostList(f.hosts)}, which are not in the built-in mirror list; if they test well they are speed tested with the built-in mirrors and considered by "Auto".`,
+        );
+      case 'same':
+        return L(
+          `${num(f.n)} 组镜像名连到同一台服务器（如 ${hostList(f.hosts)}）：线路优化把它们当一个节点，一个卡过，同组的一起避开。`,
+          `${num(f.n)} group(s) of mirror names reach the same server (e.g. ${hostList(f.hosts)}): route optimization treats them as one node, so when one stalls the whole group is avoided.`,
+        );
+      case 'dead':
+        return L(`${num(f.hosts.length)} 个节点在这个网络测不通：${hostList(f.hosts)}。`, `${num(f.hosts.length)} node(s) can't be reached on this network: ${hostList(f.hosts)}.`);
+      case 'none':
+        return n.key === mapData.cur
+          ? L('这个网络还没有测速数据：开着线路优化看视频会慢慢测，也可以点「探查这个网络」马上测一遍。', 'No speed tests on this network yet. Watching with route optimization on tests nodes gradually, or click "Survey this network" to test them all now.')
+          : L('这个网络还没有测速数据。', 'No speed tests on this network yet.');
+      default:
+        return '';
+    }
+  }
+
+  const bar = (v) => `<span class="share" aria-hidden="true"><i style="width:${Math.round((v || 0) * 100)}%"></i></span>`;
+
+  function classTable(n) {
+    if (!n.classes.length) return `<div class="empty">${L('暂无数据', 'No data')}</div>`;
+    const base = n.classes.reduce((s, c) => s + c.base, 0);
+    const req = n.classes.reduce((s, c) => s + c.req, 0);
+    const body = n.classes
+      .map((c) => `<tr><td>${chip(c.cls)}</td><td class="num">${bar(base && c.base / base)}${base ? pct(c.base / base) : '–'}</td><td class="num">${bar(req && c.req / req)}${req ? pct(c.req / req) : '–'}</td><td class="num">${bytes(c.bytes)}</td></tr>`)
+      .join('');
+    return `<table><thead><tr><th>${L('类型', 'Type')}</th><th class="num" title="${L('一次分配里当主地址算一次', 'Counted once per assignment where it is a main URL')}">${L('B 站分配为主地址', 'Assigned as main')}</th><th class="num">${L('请求', 'Requests')}</th><th class="num">${L('流量', 'Data')}</th></tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  // 网段：IPv4 前三段写成 /24，IPv6 前三组写成 /48（见 probe.js netOf）
+  const subnetText = (s) => (s.includes(':') ? `${s}::/48` : `${s}.0/24`);
+
+  function groupList(n) {
+    if (!n.groups.length) {
+      return `<div class="empty">${L('没发现共用服务器的名字（播放和测速记下的 IP 越多越准）。', 'No names sharing a server found (more IPs from playback and speed tests make this more accurate).')}</div>`;
+    }
+    return `<ul class="groups">${n.groups.map((g, i) => `<li><span class="chip">#${i + 1}</span> ${g.hosts.map(host).join(' / ')} <span class="muted">${esc(g.subnets.map(subnetText).join(', '))}</span></li>`).join('')}</ul>`;
+  }
+
+  function mapHostTable(n) {
+    if (!n.hosts.length) return `<div class="empty">${L('这个网络在所选范围里还没有节点记录。', 'No nodes recorded on this network in the selected range.')}</div>`;
+    const body = n.hosts
+      .map(
+        (r) => `<tr>
+          <td class="host" title="${esc(r.host)}">${esc(r.host)}</td>
+          <td>${chip(r.cls)}${pcdnPart(r.cls, r.pcdn, r.n)}</td>
+          <td class="mono" title="${esc(r.subnets.join(', '))}">${r.group ? `<span class="chip">#${r.group}</span> ` : ''}${esc(r.subnets.slice(0, 2).map(subnetText).join(', ')) || '–'}${r.subnets.length > 2 ? ' …' : ''}</td>
+          <td class="num">${num(r.base)} / ${num(r.backup)}</td>
+          <td class="num">${num(r.n)}</td>
+          <td class="num ${r.errRate ? 'bad' : ''}">${pct(r.errRate)}</td>
+          <td class="num ${r.auto ? 'bad' : ''}">${num(r.auto)}</td>
+          <td class="num">${ms(r.ttfbP50)}</td>
+          <td class="num">${num(r.mbpsP50, 1)}</td>
+          <td class="num" title="${L(`测速首字节 P50 ${ms(r.probeTt)}，其中探查 ${r.surveyed} 次`, `speed test TTFB P50 ${ms(r.probeTt)}, ${r.surveyed} from surveys`)}">${r.probeN ? num(r.probeScore, 1) : '–'}</td>
+          <td class="num">${r.probeN ? `${num(r.probeOk)} / ${num(r.probeN)}` : '–'}</td>
+        </tr>`,
+      )
+      .join('');
+    return `<table><thead><tr><th>host</th><th>${L('类型', 'Type')}</th><th title="${L('连到的服务器网段，# 为同一台服务器的组', 'Server subnets reached; # marks names on the same server')}">${L('服务器', 'Server')}</th><th class="num">${L('分配 主 / 备', 'Assigned main / backup')}</th><th class="num">${L('请求', 'Requests')}</th><th class="num">${L('失败率', 'Fail rate')}</th><th class="num">${L('自动识别卡顿', 'Auto stalls')}</th><th class="num">TTFB P50</th><th class="num">Mbps P50</th><th class="num">${L('测速', 'Speed test')}</th><th class="num" title="${L('测通 / 测速次数', 'succeeded / speed tests')}">${L('测通 / 次数', 'OK / tests')}</th></tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  // 几个网络并排比：不同地方分到的节点、快慢不一样，这里一眼看出差别
+  function compareTable(m) {
+    if (m.nets.length < 2) return '';
+    const body = m.nets
+      .map((n) => {
+        const main = n.main ? `${host(n.main)}` : '–';
+        const best = n.best ? `${host(n.best.host)} <span class="muted">${num(n.best.sc, 1)}</span>` : '–';
+        const name = `${esc(mapNetLabel(n))}${n.key === m.cur ? L('（当前）', ' (current)') : ''}`;
+        const seen = n.src.share;
+        return `<tr><td><button type="button" class="link" data-net="${esc(n.key)}"${n.key === mapKey ? ' aria-current="true"' : ''}>${name}</button></td><td>${esc(time(n.t1))}</td><td class="num">${num(n.sessions)}</td><td>${main}</td><td>${best}</td><td class="num">${pct(n.pcdnShare)}</td><td class="num${seen !== null && seen < SRC.most ? ' bad' : ''}">${pct(seen)}</td><td class="num">${pct(n.src.p2pShare)}</td><td class="num ${n.incidents ? 'bad' : ''}">${num(n.incidents)}</td></tr>`;
+      })
+      .join('');
+    return `<h3>${L('各网络对比', 'Networks compared')}</h3><div class="scroll"><table><thead><tr><th>${L('网络', 'Network')}</th><th>${L('最后记录', 'Last record')}</th><th class="num">${L('播放会话', 'Sessions')}</th><th>${L('B 站常分配的点播主节点', 'Usual main video node')}</th><th>${L('测速最快（Mbps）', 'Fastest in tests (Mbps)')}</th><th class="num">PCDN</th><th class="num" title="${esc(SRC_BASIS)}">${L('扩展看到', 'Seen')}</th><th class="num">P2P</th><th class="num">${L('自动识别卡顿', 'Auto stalls')}</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+
+  function renderMapNet() {
+    const n = mapData.nets.find((x) => x.key === mapKey);
+    $('map-net').value = mapKey;
+    $('map-findings').innerHTML = n.findings.map((f) => `<li data-lv="${esc(f.lv)}">${finding(f, n)}</li>`).join('');
+    $('map-classes').innerHTML = classTable(n);
+    $('map-groups').innerHTML = groupList(n);
+    $('map-hosts').innerHTML = mapHostTable(n);
+    $('map-compare').innerHTML = compareTable(mapData);
+    syncSurvey();
+  }
+
+  function renderMap() {
+    mapData = nodeMap(reportData.records, { from: reportSelection.from, cur: reportData.net, book: reportData.netBook });
+    if (!mapData.nets.length) {
+      $('map-net').innerHTML = '';
+      $('map-net').disabled = true;
+      for (const id of ['map-findings', 'map-classes', 'map-groups', 'map-compare']) $(id).innerHTML = '';
+      $('map-hosts').innerHTML = `<div class="empty">${L('暂无数据，播放视频后刷新查看。', 'No data yet. Play a video, then refresh.')}</div>`;
+      syncSurvey();
+      return;
+    }
+    if (!mapData.nets.some((x) => x.key === mapKey)) mapKey = mapData.nets[0].key;
+    $('map-net').disabled = false;
+    $('map-net').innerHTML = mapData.nets.map((n) => `<option value="${esc(n.key)}">${esc(mapNetLabel(n))}${n.key === mapData.cur ? L('（当前）', ' (current)') : ''}</option>`).join('');
+    renderMapNet();
+  }
+
+  $('map-net').addEventListener('change', () => {
+    mapKey = $('map-net').value;
+    renderMapNet();
+  });
+  $('map-compare').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-net]');
+    if (!btn) return;
+    mapKey = btn.dataset.net;
+    renderMapNet();
+  });
+
+  // 探查：点了以后 SW 在后台测，进度在 storage.session 的 survey，测完重新读记录
+  let surveyNow = null;
+  const SURVEY_END = {
+    stop: L('停下了（暂停了扩展、换了网络、清空了数据，或者后台被浏览器回收）', 'stopped (extension paused, network changed, data cleared, or the background was shut down by the browser)'),
+    gone: L('停下了：标签页关了，或者播放地址快过期了（刷新页面后可以再探查）', 'stopped: the tab was closed or the playback URL was about to expire (refresh the page, then survey again)'),
+    buffer: L('停下了：前方缓冲一直不够（暂停视频时照常测，可以暂停后再点）', 'stopped: the buffer stayed too low (testing works while paused, so pause the video and try again)'),
+    stall: L('停下了：播放器一直在缓冲', 'stopped: the player kept buffering'),
+  };
+
+  function syncSurvey() {
+    const $btn = $('survey');
+    const running = !!surveyNow && !surveyNow.end;
+    const cur = !!mapData && mapKey === mapData.cur && mapData.cur !== null;
+    $btn.disabled = running || !cur || reportData.enabled === false;
+    $btn.title = reportData.enabled === false
+      ? L('扩展暂停着，打开后才能探查', 'The extension is paused; turn it on to survey')
+      : !cur ? L('只能探查当前所在的网络', 'Only the current network can be surveyed') : '';
+    $btn.textContent = running ? L('探查中…', 'Surveying…') : L('探查这个网络', 'Survey this network');
+  }
+
+  function showSurvey(s, note = '') {
+    surveyNow = s || null;
+    const $s = $('survey-status');
+    if (note) {
+      $s.textContent = note;
+      $s.hidden = false;
+    } else if (!s) {
+      $s.hidden = true;
+    } else {
+      const kind = s.kind === 'live' ? L('直播', 'live') : L('点播', 'video');
+      const counts = L(`测了 ${num(s.done)} / ${num(s.total)} 个节点，${num(s.ok)} 个测得通`, `tested ${num(s.done)} / ${num(s.total)} nodes, ${num(s.ok)} reachable`);
+      const wait = s.wait ? L(`，${s.wait === 'stall' ? '播放器在缓冲' : '前方缓冲不够'}，等缓冲够了再测`, `; ${s.wait === 'stall' ? 'the player is buffering' : 'the buffer is low'}, waiting until it recovers`) : '';
+      $s.textContent = !s.end
+        ? L(`正在探查（${kind}）：${counts}${wait}…`, `Surveying (${kind}): ${counts}${wait}…`)
+        : s.end === 'done'
+          ? L(`探查完成（${time(s.te)}，${kind}）：${counts}。`, `Survey finished (${time(s.te)}, ${kind}): ${counts}.`)
+          : L(`探查${SURVEY_END[s.end] || SURVEY_END.stop}，${counts}。`, `Survey ${SURVEY_END[s.end] || SURVEY_END.stop}; ${counts}.`);
+      $s.hidden = false;
+    }
+    if (mapData) syncSurvey();
+  }
+
+  // guard 在下文才定义，点的时候再取
+  $('survey').addEventListener('click', () => guard(async () => {
+    const r = await command('survey');
+    if (r && r.ok) return showSurvey(r.state);
+    showSurvey(null, r && r.reason === 'off'
+      ? L('扩展暂停着，打开后才能探查。', 'The extension is paused; turn it on to survey.')
+      : L('没有正在播放的视频或直播间：先打开一个播放起来，再点探查。', 'Nothing is playing: start a video or live room first, then click Survey.'));
+  })());
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'session' || !changes.survey) return;
+    const s = changes.survey.newValue;
+    const was = changes.survey.oldValue;
+    showSurvey(s);
+    // 测完（或停下）了：重新读记录，节点分布里马上有结果
+    if (s && s.end && !(was && was.end)) guard(load)();
+  });
+
   async function command(type, extra = {}) {
     const result = await chrome.runtime.sendMessage({ type, ...extra });
     if (result && result.error) throw new Error(result.error);
@@ -388,6 +668,7 @@
       ? L(`${num(records.length)} 条记录 · 更新于 ${time(a.range.last)}`, `${num(records.length)} records · updated ${time(a.range.last)}`)
       : L(`${PERIODS[currentPeriod]}暂无记录`, `No records (${PERIODS[currentPeriod]})`);
     renderTiles(a, reportData.bytesInUse);
+    renderMap();
     hostRows = a.hosts;
     filterHosts();
     renderMarks(a.marks);
@@ -399,11 +680,20 @@
 
   async function load() {
     await command('flush');
-    const [{ records }, bytesInUse, { netBook, statsPeriod, retention }] = await Promise.all([Store.readAll(), chrome.storage.local.getBytesInUse(null), chrome.storage.local.get(['netBook', 'statsPeriod', 'retention'])]);
+    const [{ records }, bytesInUse, { netBook, statsPeriod, retention, net: curNet, settings }, { survey }] = await Promise.all([
+      Store.readAll(),
+      chrome.storage.local.getBytesInUse(null),
+      chrome.storage.local.get(['netBook', 'statsPeriod', 'retention', 'net', 'settings']),
+      chrome.storage.session.get('survey').catch(() => ({})),
+    ]);
     if (!reportData) currentPeriod = Object.hasOwn(PERIODS, statsPeriod) ? statsPeriod : 'all';
-    reportData = { records, bytesInUse, netBook, retention };
+    // net：当前网络（节点分布默认选它，只有它能探查）；enabled：总开关，缺的按开着（同 cdn.js DEFAULT_SETTINGS）
+    reportData = { records, bytesInUse, netBook, retention, net: curNet || null, enabled: !settings || settings.enabled !== false };
+    // 正在探查的、或者 30 分钟内探查过的，显示进度 / 结果
+    if (!surveyNow && survey && (!survey.end || survey.te > Date.now() - 30 * 60e3)) surveyNow = survey;
     renderReport();
     renderKeep();
+    showSurvey(surveyNow);
   }
 
   // ---------------------------------------------------------------- 记录保留

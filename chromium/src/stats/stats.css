@@ -492,3 +492,99 @@ label.keep { display: inline-flex; align-items: center; gap: 6px; color: var(--m
 .keep-notice h2 { margin: 0; }
 .keep-notice p { margin: 0; }
 .notice-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---------------------------------------------------------------- 节点分布 */
+
+.map-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.map-tools select {
+  max-width: min(100%, 360px);
+}
+
+.map-intro {
+  margin: 0 0 12px;
+  line-height: 1.7;
+}
+
+.survey-status {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  font-size: 13px;
+}
+
+.findings {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.findings li {
+  position: relative;
+  padding: 8px 12px 8px 30px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.findings li::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 14px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--info);
+}
+
+.findings li[data-lv='warn']::before { background: var(--warn); }
+.findings li[data-lv='good']::before { background: var(--ok); }
+
+#map-section h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.map-grid { margin-bottom: 16px; }
+#map-compare { margin-top: 16px; }
+
+.share {
+  display: inline-block;
+  width: 56px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  vertical-align: middle;
+  overflow: hidden;
+}
+
+.share > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.groups {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.groups li { padding: 3px 0; }
+
+#map-compare button.link { text-align: left; }
+#map-compare button.link[aria-current='true'] { font-weight: 600; }

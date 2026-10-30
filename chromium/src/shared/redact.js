@@ -13,13 +13,15 @@
 
   const node = typeof module === 'object' && module.exports;
   const { incidentOf, selectPeriod } = node ? require('./analyze.js') : root.__bilicdn;
+  const { sitePath } = node ? require('./cdn.js') : root.__bilicdn;
 
   // 导出格式的版本。privacy（0.6.24）是新加的一项，原有各项的含义没变，版本不变
   const FORMAT_VERSION = 1;
 
   /**
    * 页面地址拆成 host、编号用的键和分 P 号。ses / mark 的 path 是 cdn.js pageKey（host + 路径 + bvid / p），
-   * asg 的 path 是 location.pathname（没有 host，可能带末尾斜杠）：键都取路径（去掉末尾斜杠）加 bvid，同一个页面的键相同。
+   * asg 的 path 是 location.pathname（没有 host，可能带末尾斜杠，可能带语言前缀 /zh-Hans）：
+   * 键都取去掉语言前缀和末尾斜杠的路径加 bvid，同一个页面的键相同。1.1.1 以前的 pageKey 也带着语言前缀，一样去掉
    */
   function splitPage(path) {
     const s = String(path);
@@ -29,7 +31,7 @@
     const qi = rest.indexOf('?');
     const q = new URLSearchParams(qi < 0 ? '' : rest.slice(qi + 1));
     const bvid = q.get('bvid');
-    const key = ((qi < 0 ? rest : rest.slice(0, qi)).replace(/\/+$/, '') || '/') + (bvid ? `?bvid=${bvid}` : '');
+    const key = (sitePath(qi < 0 ? rest : rest.slice(0, qi)).replace(/\/+$/, '') || '/') + (bvid ? `?bvid=${bvid}` : '');
     return { host, key, part: q.get('p') };
   }
 
