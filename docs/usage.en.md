@@ -4,7 +4,7 @@
 
 Applies to **1.1.0**, based on the current Chromium extension. Use Chrome / Edge 120 or later. A Firefox release and store installation are not available yet.
 
-[Installation and updates](#installation-and-updates) · [Quick start](#quick-start) · [Panel and settings](#panel-and-settings) · [Route optimization](#route-optimization) · [Speed tests](#speed-tests) · [Marking problems](#marking-problems) · [Stats and exports](#stats-and-exports) · [Troubleshooting](#troubleshooting)
+[Installation and updates](#installation-and-updates) · [Quick start](#quick-start) · [Panel and settings](#panel-and-settings) · [Route optimization](#route-optimization) · [Speed tests](#speed-tests) · [Marking problems](#marking-problems) · [Stats and exports](#stats-and-exports) · [Troubleshooting](#troubleshooting) · [Desktop app](#desktop-app-preview)
 
 ## Installation and updates
 
@@ -208,6 +208,83 @@ The extension sees media requests through the browser's webRequest API, so it on
 **Keep records** defaults to 15 days. If shortening it would delete records, the stats page shows the count and dates and asks for confirmation. Legacy records also prompt before their first deletion. Automatic pruning is batched, so expired data can remain for a few extra hours. Sessions crossing the cutoff retain necessary opening and assignment context.
 
 **Clear all** requires confirmation. It deletes playback records and resets test rankings, recent problems, and network history, while keeping settings. Deletion cannot be undone; export anything you need first. Increasing retention does not restore deleted records.
+
+## Desktop app (preview)
+
+Applies to desktop **0.1.0**. The desktop app brings the extension's observation, route selection, speed tests and problem marking to the Bilibili PC client on Windows. It starts the client with a debugging port, adds the extension's page scripts to the player and live windows before their pages load, and runs the extension's background unchanged. The panel, route optimization, speed tests, marking, stats and exports described above work the same way; this section only covers what is different. It is a preview, tested with client 1.19.0.
+
+### Install and start
+
+You need Windows 10 / 11 (64-bit) and the Bilibili PC client. Node.js is included in the zip, so there is nothing else to install.
+
+1. On [Releases](https://github.com/AbyssRain75/Bilibili-Playback-Route-Optimizer/releases), download `Bilibili-Playback-Route-Optimizer-Desktop-<version>-win-x64.zip` from the desktop release marked **Pre-release** (its tag starts with `desktop-v`).
+2. Extract it to a folder. It should contain `start.cmd`, `desktop`, `extension`, `node` and `LICENSE`.
+3. Fully quit the Bilibili client from the tray (right-click the tray icon → Exit; closing its window leaves it running in the background).
+4. Double-click `start.cmd`. The desktop app starts the client, connects, and opens the panel in your default browser.
+
+Windows may show a security prompt for downloaded files: `node.exe` carries the official Node.js signature, but `start.cmd` is a script and cannot be signed. To avoid the prompt, right-click the zip → Properties → tick **Unblock** before extracting.
+
+If you forget to quit the client, the console tells you; once it has quit, the desktop app starts it. If the client is installed somewhere unusual and can't be found, type `cmd` in the folder's address bar, press Enter, and run `start.cmd --client "D:\…\哔哩哔哩.exe"`.
+
+The `desktop` folder in the release repository holds the same files (without `node.exe`). With Node.js 22 or later installed, you can double-click the `start.cmd` there.
+
+### The console window
+
+| Action | Effect |
+|---|---|
+| `p` | Open the panel |
+| `s` | Open the stats page |
+| `q`, Ctrl+C, closing the window | Quit; the client quits cleanly too |
+
+The window title shows the state (starting, reconnecting, paused). If the client is closed, the desktop app exits too. After an unclean exit, the client sometimes restarts itself in a new process on the next launch, which drops the connection: the desktop app reconnects and adds its scripts to windows already open, but playback addresses fetched before the reconnect can't be rewritten that time. Client versions that haven't been tested get a note in the console.
+
+The panel shows the player or live window you used most recently. The panel and stats addresses are printed in the console (after `Popup:` in English, `界面：` in Chinese). If the browser didn't open, press `p` or copy that address.
+
+Options you can add after `start.cmd`:
+
+| Option | Effect |
+|---|---|
+| `--client <path>` | Path to `哔哩哔哩.exe` |
+| `--no-client` | Don't start the client; just open the stats page to look at past records |
+| `--no-browser` | Don't open the panel at start |
+| `--lang zh-CN` / `--lang en` | Default language for the console and pages (defaults to the system language) |
+| `--data <folder>` | Use a different data folder |
+
+### How it differs from the extension
+
+- **Separate records**: the desktop app keeps its records and settings in `%APPDATA%\bpro-desktop`, separate from the browser extension. Its stats page only shows playback in the client.
+- **Player and live windows only**: the client's home page, feed and other windows are left alone, and preview playback there isn't recorded.
+- **Reload for a new node**: reloads the client's player window. The player resumes the same video from the same position, and the new playback addresses are chosen using the current stall records and speed tests. Don't click it while a live window is still loading: the client switches to its own "failed to load" page; click the reload button on that page to recover.
+- **Not available**: the Bilibili page theme (the client has its own theme, so the panel hides it) and the Alt+Shift+K shortcut. Mark problems with the flag on the player or in the panel.
+- **Turn off Bilibili P2P (Experimental)**: works in the client too. The player reads this setting only when its window loads, so after switching it on or off the window needs to reload: the easiest way is to press `q` in the console and double-click `start.cmd` again; if the panel happens to show **Reload for a new node**, that works too. As with the extension, it hasn't been tested on a mainland China network.
+
+### Updating and uninstalling
+
+To update, press `q` in the console, download the new zip and extract it over the old folder or into a new one. Records and settings are in the data folder and are kept.
+
+To uninstall, quit and delete the extracted folder. To delete the records as well, also delete `%APPDATA%\bpro-desktop`.
+
+### Privacy and risks
+
+- The debugging port is bound to this computer only (127.0.0.1), random each time, and closes with the client when you quit. While it is open, other programs on this computer could in principle use it to control the logged-in client, so use the desktop app only on your own computer and quit it when you're done.
+- The desktop app doesn't modify the client's files and doesn't read cookies, login information or the client's own data folder. The panel and stats page are served by a web server bound to this computer only, with a token in the address that is generated at each start, so other websites can't reach them.
+- Records stay on this computer; exports and redaction follow the same rules as the extension.
+- This is an unofficial tool, and Bilibili may treat it as third-party use. A client update could break it (for example by turning off the debugging port). Antivirus software may flag a program that starts another program with a debugging port.
+
+### Desktop troubleshooting
+
+| Problem | What to do |
+|---|---|
+| "The Bilibili client is already running" | Right-click the tray icon → Exit; once it has fully quit, the desktop app starts it |
+| "Bilibili client not found" | Pass `--client` with the path to `哔哩哔哩.exe` |
+| "The client didn't open the debugging port" | A client update may have turned this off; report the client version in Issues |
+| "The desktop app is already running" | Only one can run per data folder; find the console window that is already open |
+| The panel didn't open in the browser | Press `p` in the console, or copy the address after `Popup:` |
+| The stats page lacks the browser's records | The desktop app and the extension keep separate records; see "Separate records" above |
+| A live window shows "failed to load" after **Reload for a new node** | Click the reload button on that page; next time wait until the live window has loaded |
+| The window stops after an error | Press any key to close it; check the reason in the message and make sure the zip was fully extracted (`node.exe` is in the `node` folder) |
+
+When reporting a desktop problem, include the desktop version from the zip's file name and the client version shown in the console.
 
 ## Privacy and permissions
 

@@ -8,9 +8,11 @@ Out of the box it runs in **observe mode**: it only records, and Bilibili still 
 
 This is a personal project and has nothing to do with Bilibili. Whether a different route helps depends on your network, what you're watching and which nodes are available at the time; not every stall can be fixed by switching routes.
 
-[Installation](#installation) · [Usage guide](#usage-guide) · [Updating](#updating-without-losing-records) · [Troubleshooting](#troubleshooting) · [Privacy](#privacy)
+[Installation](#installation) · [Usage guide](#usage-guide) · [Updating](#updating-without-losing-records) · [Troubleshooting](#troubleshooting) · [Privacy](#privacy) · [Desktop app](#desktop-app-preview)
 
 The [user guide](docs/usage.en.md) ([简体中文](docs/usage.md)) covers the details: every setting and its default, and how route selection and speed tests work.
+
+If you watch in the Bilibili PC client on Windows, try the [desktop app](#desktop-app-preview) (preview).
 
 ## What it does
 
@@ -195,6 +197,34 @@ Still stuck? Open an [issue](https://github.com/AbyssRain75/Bilibili-Playback-Ro
 | `declarativeNetRequestWithHostAccess` | Set the Bilibili Referer and Origin the CDN requires, only on the extension's own test requests; page requests are untouched |
 | `*.bilibili.com` | Read playback information, rewrite playback addresses when optimization is on, change the P2P switches the player reads when Bilibili's P2P is turned off, detect stalls, show the player button, switch the page theme and query network location |
 | `*.bilivideo.com`, `*.bilivideo.cn`, `*.akamaized.net`, `*.szbdyd.com` | Watch media requests and test Bilibili CDN and PCDN nodes |
+
+## Desktop app (preview)
+
+The desktop app brings the extension's observation, route selection, speed tests and problem marking to the **Bilibili PC client on Windows**. It starts the client and connects to it, puts the extension's page scripts into the client's player and live windows, and runs the extension's background unchanged, so records, route selection and speed tests follow the same rules as the extension. The panel and stats page open in your default browser. It is a preview (0.x), tested with client 1.19.0.
+
+### Install and start
+
+1. On [Releases](https://github.com/AbyssRain75/Bilibili-Playback-Route-Optimizer/releases), find the desktop release marked **Pre-release** (its tag starts with `desktop-v`) and download `Bilibili-Playback-Route-Optimizer-Desktop-<version>-win-x64.zip`.
+2. Extract it to a folder. The zip includes the official Node.js runtime (`node\node.exe`), so there is nothing else to install.
+3. **Fully quit** the Bilibili client from the tray first (right-click the tray icon → Exit), then double-click `start.cmd` in the folder.
+
+A console window opens. The desktop app starts the client, connects, and opens the panel in your browser. In the console, press `p` for the panel, `s` for the stats page and `q` to quit; closing the console window also quits the client cleanly. As with the extension, it starts in observation mode with route optimization and auto speed test off.
+
+### How it differs from the extension
+
+- Windows (64-bit) only. It only connects to player and live windows; the client's home page and other windows are left alone.
+- The client has to be started by the desktop app. If it is already running, quit it from the tray first; the desktop app waits and then starts it.
+- Records and settings are separate from the browser extension and are stored in `%APPDATA%\bpro-desktop`.
+- There is no Bilibili page theme and no Alt+Shift+K shortcut; mark problems with the flag on the player or in the panel.
+- **Reload for a new node** reloads the client's player window, which resumes from the same position.
+
+### Privacy and risks
+
+- The desktop app starts the client with a debugging port. The port is bound to this computer only (127.0.0.1), random each time, and closes with the client when you quit. While it is open, other programs on this computer could in principle use it to control the logged-in client.
+- The desktop app doesn't modify the client's files and doesn't read cookies or login information. The panel and stats page are served by a web server bound to this computer only, with a token in the address that is generated at each start. Records stay on this computer.
+- This is an unofficial tool, and Bilibili may treat it as third-party use. A client update could also break it (for example by turning off the debugging port). Antivirus software may flag a program that starts another program with a debugging port.
+
+See the [Desktop app](docs/usage.en.md#desktop-app-preview) section of the user guide for more, including updating and troubleshooting.
 
 ## Credits
 
