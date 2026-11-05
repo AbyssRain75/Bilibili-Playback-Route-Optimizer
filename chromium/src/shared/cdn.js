@@ -189,11 +189,21 @@
     return m && SITE_LANGS.has(m[1].toLowerCase()) ? m[2] || '/' : pathname;
   }
 
+  // B 站 PC 客户端（桌面版接入，见 docs/desktop-development-plan.md）的播放器页：bilipc.bilibili.com/player.html?type=ugc&aid=…&cid=…&bvid=…&page=1，
+  // 番剧 type=ogv&…&epid=…，课程 type=pugv。播放器窗口启动时就建好（地址带 ?isWindowNewOpen=true，没有 type），换视频只改查询参数。
+  // 只认这一个页面，客户端的主窗口（index.html）等都算「其他」；网页的判断不变
+  const isPcPlayer = (u) => u.hostname === 'bilipc.bilibili.com' && u.pathname === '/player.html';
+  const PC_TYPES = { ugc: 'video', ogv: 'pgc', pugv: 'cheese' };
+
   function pageType(href) {
     const u = parseUrl(href);
     if (!u) return 'other';
     if (u.hostname === 'live.bilibili.com') return 'live';
     if (u.hostname === 'player.bilibili.com') return 'embed';
+    if (isPcPlayer(u)) {
+      const type = u.searchParams.get('type');
+      return Object.hasOwn(PC_TYPES, type) ? PC_TYPES[type] : 'other';
+    }
     const p = sitePath(u.pathname);
     if (p.startsWith('/video/')) return 'video';
     if (p.startsWith('/bangumi/')) return 'pgc';
@@ -207,27 +217,32 @@
   /**
    * 页面标识：host + 路径（去掉语言前缀和末尾斜杠）+ 决定播放内容的参数（bvid、分 P）。
    * 站内切换视频只改地址栏、不重新加载页面，靠它判断是否换了页面；spm_id_from 等来源参数的变化不算。
+   * 客户端的播放器页（见 isPcPlayer）另带番剧的 epid，分 P 在 page 参数里，也写成 p（导出脱敏按 p 认分 P，见 redact.js splitPage）
    */
   function pageKey(href) {
     const u = parseUrl(href);
     if (!u) return '';
     const q = [];
+    const pc = isPcPlayer(u);
     const bvid = u.searchParams.get('bvid');
-    const p = u.searchParams.get('p');
+    const epid = pc ? u.searchParams.get('epid') : null;
+    const p = u.searchParams.get(pc ? 'page' : 'p');
     if (bvid) q.push(`bvid=${bvid}`);
+    if (epid) q.push(`epid=${epid}`);
     if (p && p !== '1') q.push(`p=${p}`);
     return u.host + (sitePath(u.pathname).replace(/\/+$/, '') || '/') + (q.length ? `?${q.join('&')}` : '');
   }
 
   /**
    * 地址里的视频标识（BV 号、av 号、ep 号），页面地址和播放接口地址都适用，
-   * 用来把切换前拿到的播放地址对应到切换后的页面。
+   * 用来把切换前拿到的播放地址对应到切换后的页面。客户端的播放器页番剧写的是 epid（见 isPcPlayer），和接口的 ep_id 是同一个号
    */
   function videoIds(href) {
     const u = parseUrl(href);
     if (!u) return [];
     const q = u.searchParams;
-    const ids = [q.get('bvid'), q.get('avid') && `av${q.get('avid')}`, q.get('ep_id') && `ep${q.get('ep_id')}`];
+    const ep = q.get('ep_id') || q.get('epid');
+    const ids = [q.get('bvid'), q.get('avid') && `av${q.get('avid')}`, ep && `ep${ep}`];
     const m = /\/(BV[0-9A-Za-z]{10}|av\d+|ep\d+)(\/|$)/.exec(u.pathname);
     if (m) ids.push(m[1]);
     return [...new Set(ids.filter(Boolean))];

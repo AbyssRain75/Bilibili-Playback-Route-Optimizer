@@ -66,7 +66,7 @@
     <!-- 关闭 B 站 P2P（测试功能，默认不改，见 main/hook.js「关闭 B 站 P2P」）：播放器加载时读一次，刷新页面后生效；暂停时不起作用 -->
     <section class="card p2p" id="p2p-card">
       <label class="switch-row"><span data-en="Turn off Bilibili P2P (Experimental)">关闭 B 站 P2P（测试功能）</span><input type="checkbox" id="opt-p2p" role="switch" /></label>
-      <p class="muted p2p-note" data-en="Mainly matters on networks in mainland China, where Bilibili's web player fetches much of the media over P2P, which uses your upload and is invisible to the extension. With this on, the player fetches everything over HTTP. Takes effect after reloading the page. On networks where P2P works well, playback may get slower. Relies on the player's internal settings: if Bilibili changes them, this stops working and nothing is changed.">主要影响中国大陆网络：B 站网页播放器在那里大部分数据走 P2P，占上传，扩展也看不到。打开后播放器全部改走 HTTP，刷新页面后生效。P2P 好的网络上可能更慢。依赖 B 站播放器的内部配置，B 站改了就失效（等于不改）。</p>
+      <p class="muted p2p-note" data-en="Mainly matters on networks in mainland China, where Bilibili's web player fetches much of the media over P2P, which uses your upload and is invisible to the extension. With this on, the player fetches everything over HTTP. Takes effect after reloading the page. On networks where P2P works well, playback may get slower. Relies on the player's internal settings: if Bilibili changes them, this stops working and normal playback is unaffected.">主要影响中国大陆网络：B 站网页播放器在那里大部分数据走 P2P，占上传，扩展也看不到。打开后播放器全部改走 HTTP，刷新页面后生效。P2P 好的网络上可能更慢。依赖 B 站播放器的内部配置；若 B 站后续调整则自动失效，不影响正常播放。</p>
     </section>
     <!-- B 站网页的浅色 / 深色（content/theme.js）：已打开的页面马上换；只换颜色、不碰播放，暂停时也照常可选 -->
     <section class="card theme" id="theme-card">

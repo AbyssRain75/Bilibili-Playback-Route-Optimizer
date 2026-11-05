@@ -2,7 +2,7 @@
 
 [简体中文](usage.md) | English · [Project home](../README.en.md)
 
-Applies to **1.1.0**, based on the current Chromium extension. Use Chrome / Edge 120 or later. A Firefox release and store installation are not available yet.
+Applies to **1.1.1**, based on the current Chromium extension. Use Chrome / Edge 120 or later. A Firefox release and store installation are not available yet.
 
 [Installation and updates](#installation-and-updates) · [Quick start](#quick-start) · [Panel and settings](#panel-and-settings) · [Route optimization](#route-optimization) · [Speed tests](#speed-tests) · [Marking problems](#marking-problems) · [Stats and exports](#stats-and-exports) · [Troubleshooting](#troubleshooting) · [Desktop app](#desktop-app-preview)
 

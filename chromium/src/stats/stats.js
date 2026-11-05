@@ -34,7 +34,11 @@
     const autoN = a.auto.stall + a.auto.slow + a.auto.fail;
     $('tiles').innerHTML = [
       tile(L('记录时长', 'Time recorded'), `${num(hours, 1)} h`, a.range ? L(`${esc(time(a.range.since))} 起`, `since ${esc(time(a.range.since))}`) : L('暂无数据', 'No data')),
-      tile(L('播放会话', 'Playback sessions'), num(played), L(`记下的会话 ${num(c.ses || 0)}`, `recorded sessions ${num(c.ses || 0)}`)),
+      tile(
+        L('播放会话', 'Playback sessions'),
+        num(played),
+        `<span title="${esc(L('有媒体请求的播放会话 / 写入记录的全部会话', 'Sessions with media requests / all sessions written to records'))}">${L(`记下的会话 ${num(c.ses || 0)}`, `recorded sessions ${num(c.ses || 0)}`)}</span>`,
+      ),
       tile(L('媒体请求', 'Media requests'), num(c.req || 0), `${pcdnShare(a.hosts)}${L('总存储', 'storage')} ${bytes(bytesInUse)}<br>${srcLine(a.src)}`),
       tile(L('分配捕获率', 'Assignment capture'), played ? pct(withAsg / played) : '–', coverageNote.map(esc).join('<br>')),
       tile(
@@ -61,7 +65,7 @@
 
   // 「扩展看到的比例」的口径（见 analyze.js srcSummary），统计页各处的提示共用
   const SRC_BASIS = L(
-    '扩展记到的媒体请求字节 ÷ 媒体数据：点播按播放器自己按来源记的字节（HTTP、B 站的 P2P、PCDN 加载器），直播按请求字节加 P2P（WebRTC）收到的字节。PCDN 加载器取的也是 HTTP，扩展看得到的已经算在「扩展看到」里，单独列出只说明它取了多少。没有来源记录的会话（旧版本记下的，或者读不到播放器的统计、也没用 P2P 的）不知道，不算进去',
+    '扩展记到的媒体请求字节 ÷ 媒体数据：点播按播放器自身按来源统计的字节（HTTP、B 站的 P2P、PCDN 加载器），直播按请求字节加 P2P（WebRTC）收到的字节。PCDN 加载器取的也是 HTTP，扩展看得到的已经算在「扩展看到」里，单独列出只说明它取了多少。没有来源记录的会话（旧版本记下的，或者读不到播放器的统计、也没用 P2P 的）不知道，不算进去',
     "Media request bytes the extension recorded ÷ media data: for videos, the bytes the player itself counts by source (HTTP, Bilibili's P2P, the PCDN loader); for live streams, request bytes plus bytes received over P2P (WebRTC). The PCDN loader also fetches over HTTP; whatever of it the extension sees is already counted as seen, and it is listed only to show how much it fetched. Sessions without source data (recorded by older versions, or where the player's counts couldn't be read and P2P wasn't used) are unknown and left out",
   );
   // 上传量：没有上传时写 0（bytes 把 0 显示成「–」，那是没有数据的意思）
@@ -413,7 +417,7 @@
     switch (f.code) {
       case 'assign':
         return L(
-          `B 站在这个网络主要把「${esc(CLASS_LABELS[f.cls] || f.cls)}」节点当主地址（${pct(f.share)}）${f.host ? `，点播最常分配 ${host(f.host)}（${pct(f.hostShare)} 的分配）` : ''}。`,
+          `B 站在这个网络主要把「${esc(CLASS_LABELS[f.cls] || f.cls)}」节点当主地址（${pct(f.share)}）${f.host ? `，点播最常分配 ${host(f.host)}（占点播分配的 ${pct(f.hostShare)}）` : ''}。`,
           `On this network Bilibili mostly assigns ${esc(CLASS_LABELS[f.cls] || f.cls)} nodes as the main URL (${pct(f.share)})${f.host ? `; for videos it most often assigns ${host(f.host)} (${pct(f.hostShare)} of assignments)` : ''}.`,
         );
       case 'faster':

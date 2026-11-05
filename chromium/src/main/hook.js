@@ -171,9 +171,12 @@
     const ids = u ? lib.videoIds(u.href) : [];
     // 悬停推荐卡片时，播放器预加载那个视频（gaia_source=pre-load，自动连播的下一个也是），
     // 卡片上的小窗预览再请求一次（view-card，is_main_page=false）。都不是当前页面的视频：
-    // 不作为当前分配，也不计起播（预览小窗的 playing 会被误当成起播）
+    // 不作为当前分配，也不计起播（预览小窗的 playing 会被误当成起播）。
+    // B 站 PC 客户端（桌面版）的播放器窗口里，主播放器自己的请求也带 is_main_page=false，另带 from_client=PC_APP（2026-10-31 实测），
+    // 不能据此当成预览：不然当前视频的分配、起播、测速地址都没有
     const gs = u ? u.searchParams.get('gaia_source') || '' : '';
-    const pre = gs === 'pre-load' || gs === 'view-card' || (!!u && u.searchParams.get('is_main_page') === 'false');
+    const card = !!u && u.searchParams.get('is_main_page') === 'false' && u.searchParams.get('from_client') !== 'PC_APP';
+    const pre = gs === 'pre-load' || gs === 'view-card' || card;
     const ev = { src, api, vid: ids[0] || '', ...(gs ? { gs } : {}), ...(pre ? { pre: 1 } : {}), ...info };
     emit('asg', { ...ev, path: location.pathname });
     let target = null;
@@ -574,10 +577,14 @@
   let srcAt = 0; // 上一段结束的时间（performance.now()，从页面打开算）
   let srcTimer = null;
 
-  /** 播放器内核（点播的 dashKernel，站内切换后播放器重建会换一个）；没有播放器、没有这个接口、抛错时为 null。 */
+  /**
+   * 播放器内核（点播的 dashKernel，站内切换后播放器重建会换一个）；没有播放器、没有这个接口、抛错时为 null。
+   * 网页上播放器挂在 window.player；B 站 PC 客户端（桌面版）的播放器窗口里没有它，同一个对象叫 window.biliPlayer（2026-10-31 实测，
+   * 也有 __core()，读法一样）
+   */
   function playerCore() {
     try {
-      const p = window.player;
+      const p = window.player || window.biliPlayer;
       const core = p && typeof p.__core === 'function' ? p.__core() : null;
       return core && typeof core.getCDNInfo === 'function' ? core : null;
     } catch {

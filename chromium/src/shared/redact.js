@@ -21,7 +21,8 @@
   /**
    * 页面地址拆成 host、编号用的键和分 P 号。ses / mark 的 path 是 cdn.js pageKey（host + 路径 + bvid / p），
    * asg 的 path 是 location.pathname（没有 host，可能带末尾斜杠，可能带语言前缀 /zh-Hans）：
-   * 键都取去掉语言前缀和末尾斜杠的路径加 bvid，同一个页面的键相同。1.1.1 以前的 pageKey 也带着语言前缀，一样去掉
+   * 键都取去掉语言前缀和末尾斜杠的路径加 bvid，同一个页面的键相同。1.1.1 以前的 pageKey 也带着语言前缀，一样去掉。
+   * B 站 PC 客户端的播放器页（1.2.6 起，见 cdn.js pageKey）所有视频都是 /player.html，番剧只靠 epid 分，键里也带上
    */
   function splitPage(path) {
     const s = String(path);
@@ -30,8 +31,8 @@
     const rest = at < 0 ? '/' : s.slice(at);
     const qi = rest.indexOf('?');
     const q = new URLSearchParams(qi < 0 ? '' : rest.slice(qi + 1));
-    const bvid = q.get('bvid');
-    const key = (sitePath(qi < 0 ? rest : rest.slice(0, qi)).replace(/\/+$/, '') || '/') + (bvid ? `?bvid=${bvid}` : '');
+    const ids = ['bvid', 'epid'].filter((k) => q.get(k)).map((k) => `${k}=${q.get(k)}`);
+    const key = (sitePath(qi < 0 ? rest : rest.slice(0, qi)).replace(/\/+$/, '') || '/') + (ids.length ? `?${ids.join('&')}` : '');
     return { host, key, part: q.get('p') };
   }
 
