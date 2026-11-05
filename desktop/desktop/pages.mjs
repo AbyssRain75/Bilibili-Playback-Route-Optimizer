@@ -49,6 +49,23 @@ const GUARD = `
   };
   if (!wanted()) return;`;
 
+// 「刷新换节点」重新加载播放器窗口之前，在页面里把地址的 p 补成当前分 P（page）。2026-11-05 实测（客户端 1.19.0 和热更新的 1.20.0 一样，
+// 计划工作项 20）：重新加载时播放器页在 beforeunload 里把当前地址加上 t=播放位置交给客户端主进程（window/replace），主进程按地址里的 p
+// 定放哪一 P，页面加载完再把这份参数发回来（events/playerParamsChange，页面内换地址）。可页面里自动连播、点选集换到别的分 P 时，
+// 地址里只写 page=2、没有 p，主进程就当成第 1 P：刷新后跳回第 1 P（进度照旧），记录里先开一个第 2 P 的空会话、紧接着站内切换到第 1 P 的会话。
+// 补上 p 以后刷新停在原来那一 P、接着放，只开一个会话。只改地址（replaceState 不触发页面的路由），不是播放器窗口、没有 page 的不动。
+// Runtime.evaluate 在页面自己的执行上下文里跑，要照顾 Chromium 108 的写法（工作项 2）
+export const KEEP_PART = `(function () {
+  try {
+    if (location.hostname !== 'bilipc.bilibili.com' || location.pathname !== '/player.html') return;
+    var u = new URL(location.href);
+    var page = u.searchParams.get('page');
+    if (!/^[1-9]\\d*$/.test(page || '') || u.searchParams.get('p') === page) return;
+    u.searchParams.set('p', page);
+    history.replaceState(history.state, '', u.href);
+  } catch (e) {}
+})()`;
+
 /** 按 manifest 拼出两段要注入的脚本。key：MAIN world 里防重复注入的记号（每次启动随机，页面猜不到）。 */
 export function bundles(extDir, key = `__bpro_${randomBytes(6).toString('hex')}`) {
   const manifest = JSON.parse(fs.readFileSync(path.join(extDir, 'manifest.json'), 'utf8'));
@@ -332,11 +349,13 @@ export class Pages {
    * 2026-10-31 实测（计划工作项 12）：播放器窗口地址里带着 type、bvid，重新加载后客户端接着放同一个视频、从原来的位置接着放
    * （重新加载时地址上多了 t=播放位置），会话重开；直播窗口照常。在主窗口或播放器窗口里再 openPlayerWindow 同一个视频
    * 只是把窗口调到前面，不重新请求播放地址，换不了节点，所以不用它。
+   * 多 P 视频要先补上地址里的 p（KEEP_PART，2026-11-05 实测，见计划工作项 20）。
    */
   async reload(tabId) {
     const tab = this.tabs.get(tabId);
     const top = tab && [...tab.sessions].find((s) => s.top);
     if (!top) throw new Error(`No tab with id: ${tabId}.`);
+    await this.cdp.send('Runtime.evaluate', { expression: KEEP_PART }, top.id).catch(() => {});
     await this.cdp.send('Page.reload', {}, top.id);
   }
 

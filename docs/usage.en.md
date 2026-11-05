@@ -211,7 +211,7 @@ The extension sees media requests through the browser's webRequest API, so it on
 
 ## Desktop app (preview)
 
-Applies to desktop **0.1.0**. The desktop app brings the extension's observation, route selection, speed tests and problem marking to the Bilibili PC client on Windows. It starts the client with a debugging port, adds the extension's page scripts to the player and live windows before their pages load, and runs the extension's background unchanged. The panel, route optimization, speed tests, marking, stats and exports described above work the same way; this section only covers what is different. It is a preview, tested with client 1.19.0.
+Applies to desktop **0.1.1**. The desktop app brings the extension's observation, route selection, speed tests and problem marking to the Bilibili PC client on Windows. It starts the client with a debugging port, adds the extension's page scripts to the player and live windows before their pages load, and runs the extension's background unchanged. The panel, route optimization, speed tests, marking, stats and exports described above work the same way; this section only covers what is different. It is a preview, tested with client 1.19.0 and its automatic 1.20.0 update.
 
 ### Install and start
 
@@ -254,7 +254,7 @@ Options you can add after `start.cmd`:
 
 - **Separate records**: the desktop app keeps its records and settings in `%APPDATA%\bpro-desktop`, separate from the browser extension. Its stats page only shows playback in the client.
 - **Player and live windows only**: the client's home page, feed and other windows are left alone, and preview playback there isn't recorded.
-- **Reload for a new node**: reloads the client's player window. The player resumes the same video from the same position, and the new playback addresses are chosen using the current stall records and speed tests. Don't click it while a live window is still loading: the client switches to its own "failed to load" page; click the reload button on that page to recover.
+- **Reload for a new node**: reloads the client's player window. The player resumes the same video (the same part, for multi-part videos) from the same position, and the new playback addresses are chosen using the current stall records and speed tests. Don't click it while a live window is still loading: the client switches to its own "failed to load" page; click the reload button on that page to recover.
 - **Not available**: the Bilibili page theme (the client has its own theme, so the panel hides it) and the Alt+Shift+K shortcut. Mark problems with the flag on the player or in the panel.
 - **Turn off Bilibili P2P (Experimental)**: works in the client too. The player reads this setting only when its window loads, so after switching it on or off the window needs to reload: the easiest way is to press `q` in the console and double-click `start.cmd` again; if the panel happens to show **Reload for a new node**, that works too. As with the extension, it hasn't been tested on a mainland China network.
 

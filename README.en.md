@@ -200,7 +200,7 @@ Still stuck? Open an [issue](https://github.com/AbyssRain75/Bilibili-Playback-Ro
 
 ## Desktop app (preview)
 
-The desktop app brings the extension's observation, route selection, speed tests and problem marking to the **Bilibili PC client on Windows**. It starts the client and connects to it, puts the extension's page scripts into the client's player and live windows, and runs the extension's background unchanged, so records, route selection and speed tests follow the same rules as the extension. The panel and stats page open in your default browser. It is a preview (0.x), tested with client 1.19.0.
+The desktop app brings the extension's observation, route selection, speed tests and problem marking to the **Bilibili PC client on Windows**. It starts the client and connects to it, puts the extension's page scripts into the client's player and live windows, and runs the extension's background unchanged, so records, route selection and speed tests follow the same rules as the extension. The panel and stats page open in your default browser. It is a preview (0.x), tested with client 1.19.0 and its automatic 1.20.0 update.
 
 ### Install and start
 
